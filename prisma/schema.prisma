@@ -32,6 +32,10 @@ model Driver {
 
   workPeriods WorkPeriod[]
   leaveEvents LeaveEvent[]
+
+  receivedTransfers ShiftTransferEvent[] @relation("TransferReceiver")
+  givenTransfers    ShiftTransferEvent[] @relation("TransferGiver")
+
 }
 
 model WorkPeriod {
@@ -44,6 +48,8 @@ model WorkPeriod {
 
   driver      Driver          @relation(fields: [driverId], references: [id], onDelete: Restrict)
   corrections WorkCorrection[]
+
+  shiftTransfers ShiftTransferEvent[]
 
   @@index([driverId, status])
   @@index([driverId, declaredStartTime])
@@ -87,4 +93,21 @@ model LeaveCorrection {
   leave LeaveEvent @relation(fields: [leaveId], references: [id], onDelete: Restrict)
 
   @@index([leaveId, createdAt(sort: Desc)])
+}
+
+model ShiftTransferEvent {
+  id                     String   @id @default(uuid()) @db.Uuid
+  driverId               String   @db.Uuid              // receiving driver
+  transferredFromDriverId String?  @db.Uuid              // optional giver
+  workPeriodId           String?  @db.Uuid              // contextual only
+  reason                 String?
+  createdAt              DateTime @default(now())
+
+  /// Relations
+  driver                Driver     @relation("TransferReceiver", fields: [driverId], references: [id], onDelete: Restrict)
+  transferredFromDriver Driver?    @relation("TransferGiver", fields: [transferredFromDriverId], references: [id], onDelete: Restrict)
+  workPeriod            WorkPeriod? @relation(fields: [workPeriodId], references: [id], onDelete: Restrict)
+
+  @@index([driverId, createdAt])
+  @@index([workPeriodId])
 }
