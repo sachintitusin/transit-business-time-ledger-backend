@@ -1,3 +1,11 @@
+/**
+ * Cross-domain business policy enforcing Invariant I16.
+ *
+ * This policy is intentionally placed in the application layer
+ * because it coordinates multiple bounded contexts (Work, Leave)
+ * and represents a system-level rule rather than an aggregate invariant.
+ */
+
 import { EffectiveWorkTime } from '../../domain/work/EffectiveWorkTime'
 import { EffectiveLeaveTime } from '../../domain/leave/EffectiveLeaveTime'
 import { DomainError } from '../../domain/shared/DomainError'
