@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2019",
     "lib": ["ES2019"],
-    "module": "ESNext",
+    "module": "commonjs",
     "moduleResolution": "Node",
     "types": ["vitest/globals"],
     "strict": true,
