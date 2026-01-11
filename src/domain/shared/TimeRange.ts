@@ -39,6 +39,26 @@ export class TimeRange {
     return this.start < other.end && other.start < this.end
   }
 
+  intersect(other: TimeRange): TimeRange {
+    if (!this.overlaps(other)) {
+      throw new DomainError(
+        'NO_TIME_RANGE_INTERSECTION',
+        'Time ranges do not overlap',
+        { this: this, other }
+      )
+    }
+
+    const start = new Date(
+      Math.max(this.start.getTime(), other.start.getTime())
+    )
+
+    const end = new Date(
+      Math.min(this.end.getTime(), other.end.getTime())
+    )
+
+    return TimeRange.create(start, end)
+  }
+
   durationMs(): number {
     return this.end.getTime() - this.start.getTime()
   }
