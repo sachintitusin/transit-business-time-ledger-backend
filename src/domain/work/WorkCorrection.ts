@@ -2,11 +2,11 @@ import { TimeRange } from '../shared/TimeRange'
 import { WorkPeriod } from './WorkPeriod'
 import { WorkPeriodStatus } from './WorkPeriodStatus'
 import { InvalidCorrectedTime, WorkPeriodNotClosed } from './WorkCorrectionErrors'
-import { WorkCorrectionId } from '../shared/types'
+import { WorkCorrectionId, WorkPeriodId } from '../shared/types'
 
 export class WorkCorrection {
   readonly id: WorkCorrectionId
-  readonly workPeriodId: string
+  readonly workPeriodId: WorkPeriodId
   readonly correctedStartTime: Date
   readonly correctedEndTime: Date
   readonly reason?: string
@@ -14,7 +14,7 @@ export class WorkCorrection {
 
   private constructor(
     id: WorkCorrectionId,
-    workPeriodId: string,
+    workPeriodId: WorkPeriodId,
     correctedStartTime: Date,
     correctedEndTime: Date,
     reason: string | undefined,
@@ -49,7 +49,7 @@ export class WorkCorrection {
 
     return new WorkCorrection(
       id,
-      workPeriod.id,
+      workPeriod.id, // already WorkPeriodId
       correctedStartTime,
       correctedEndTime,
       reason,
