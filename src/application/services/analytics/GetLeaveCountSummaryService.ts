@@ -6,18 +6,25 @@ import { LeaveCorrectionRepository } from '../../ports/LeaveCorrectionRepository
 
 export class GetLeaveCountSummaryService {
   constructor(
-    private readonly leaveRepo: LeaveRepository,
-    private readonly leaveCorrectionRepo: LeaveCorrectionRepository
+    private readonly leaveRepository: LeaveRepository,
+    private readonly leaveCorrectionRepository: LeaveCorrectionRepository
   ) {}
 
-  async execute(driverId: DriverId, range: TimeRange) {
-    const leaves = await this.leaveRepo.findByDriver(driverId)
+  async execute(query: {
+    driverId: DriverId
+    range: TimeRange
+  }): Promise<LeaveCountSummary> {
+    const { driverId, range } = query
+
+    const leaves =
+      await this.leaveRepository.findByDriver(driverId)
 
     const correctionsMap = new Map()
 
     for (const leave of leaves) {
       const corrections =
-        await this.leaveCorrectionRepo.findByLeaveId(leave.id)
+        await this.leaveCorrectionRepository.findByLeaveId(leave.id)
+
       correctionsMap.set(leave.id, corrections)
     }
 

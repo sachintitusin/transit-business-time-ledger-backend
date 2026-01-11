@@ -6,19 +6,25 @@ import { WorkCorrectionRepository } from '../../ports/WorkCorrectionRepository'
 
 export class GetWorkSummaryService {
   constructor(
-    private readonly workPeriodRepo: WorkPeriodRepository,
-    private readonly workCorrectionRepo: WorkCorrectionRepository
+    private readonly workPeriodRepository: WorkPeriodRepository,
+    private readonly workCorrectionRepository: WorkCorrectionRepository
   ) {}
 
-  async execute(driverId: DriverId, range: TimeRange) {
+  async execute(query: {
+    driverId: DriverId
+    range: TimeRange
+  }): Promise<WorkSummary> {
+    const { driverId, range } = query
+
     const workPeriods =
-      await this.workPeriodRepo.findClosedByDriver(driverId)
+      await this.workPeriodRepository.findClosedByDriver(driverId)
 
     const correctionsMap = new Map()
 
     for (const work of workPeriods) {
       const corrections =
-        await this.workCorrectionRepo.findByWorkPeriodId(work.id)
+        await this.workCorrectionRepository.findByWorkPeriodId(work.id)
+
       correctionsMap.set(work.id, corrections)
     }
 
