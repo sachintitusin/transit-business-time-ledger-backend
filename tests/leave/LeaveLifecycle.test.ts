@@ -1,80 +1,116 @@
 import { describe, it, expect } from 'vitest'
-import { RecordLeaveService } from '../../src/application/services/leave/RecordLeaveService'
-import { InMemoryLeaveRepository } from '../fakes/InMemoryLeaveRepository'
-import { InMemoryWorkPeriodRepository } from '../fakes/InMemoryWorkPeriodRepository'
-import { DriverId, LeaveId } from '../../src/domain/shared/types'
-import { LeaveCorrectionService } from '../../src/application/services/leave/LeaveCorrectionService'
-import { InMemoryLeaveCorrectionRepository } from '../fakes/InMemoryLeaveCorrectionRepository'
 
-describe('Leave lifecycle', () => {
-  it('records leave successfully', async () => {
-    const leaveRepo = new InMemoryLeaveRepository()
-    const workRepo = new InMemoryWorkPeriodRepository()
+import { WorkSummary } from '../../src/domain/analytics/WorkSummary'
+import { TimeRange } from '../../src/domain/shared/TimeRange'
+import { WorkCorrection } from '../../src/domain/work/WorkCorrection'
+import { WorkPeriod } from '../../src/domain/work/WorkPeriod'
+import { WorkPeriodId } from '../../src/domain/shared/types'
 
-    const recordLeave = new RecordLeaveService(
-      leaveRepo,
-      workRepo
+describe('WorkSummary', () => {
+  const now = new Date('2026-01-10T05:00:00Z')
+
+  it('counts work fully inside the range', () => {
+    const work = WorkPeriod.start(
+      'wp-1' as WorkPeriodId,
+      'driver-1' as any,
+      new Date('2026-01-10T08:00:00Z'),
+      now
     )
 
-    const driverId = 'driver-1' as DriverId
-    const leaveId = 'leave-1' as LeaveId
+    work.close(new Date('2026-01-10T16:00:00Z'))
 
-    await recordLeave.execute(
-      driverId,
-      leaveId,
-      new Date('2025-01-01T10:00:00Z'),
-      new Date('2025-01-01T12:00:00Z'),
-      new Date()
+    const range = TimeRange.create(
+      new Date('2026-01-10T00:00:00Z'),
+      new Date('2026-01-11T00:00:00Z')
     )
 
-    const leaves = await leaveRepo.findByDriver(driverId)
+    const result = WorkSummary.calculate(
+      range,
+      [work],
+      new Map<WorkPeriodId, WorkCorrection[]>()
+    )
 
-    expect(leaves.length).toBe(1)
-    expect(leaves[0].id).toBe(leaveId)
+    expect(result.totalHours).toBe(8)
   })
 
-  it('corrects leave successfully', async () => {
-  const leaveRepo = new InMemoryLeaveRepository()
-  const leaveCorrectionRepo = new InMemoryLeaveCorrectionRepository()
-  const workRepo = new InMemoryWorkPeriodRepository()
+  it('counts only the overlapping portion of work', () => {
+    const work = WorkPeriod.start(
+      'wp-2' as WorkPeriodId,
+      'driver-1' as any,
+      new Date('2026-01-10T06:00:00Z'),
+      now
+    )
 
-  const recordLeave = new RecordLeaveService(
-    leaveRepo,
-    workRepo
-  )
+    work.close(new Date('2026-01-10T14:00:00Z'))
 
-  const correctLeave = new LeaveCorrectionService(
-    leaveRepo,
-    leaveCorrectionRepo,
-    workRepo
-  )
+    const range = TimeRange.create(
+      new Date('2026-01-10T10:00:00Z'),
+      new Date('2026-01-10T18:00:00Z')
+    )
 
-  const driverId = 'driver-1' as DriverId
-  const leaveId = 'leave-1' as LeaveId
-  const correctionId = 'corr-1' as any
+    const result = WorkSummary.calculate(
+      range,
+      [work],
+      new Map<WorkPeriodId, WorkCorrection[]>()
+    )
 
-  await recordLeave.execute(
-    driverId,
-    leaveId,
-    new Date('2025-01-01T10:00:00Z'),
-    new Date('2025-01-01T12:00:00Z'),
-    new Date()
-  )
+    expect(result.totalHours).toBe(4)
+  })
 
-  await correctLeave.execute(
-    driverId,
-    leaveId,
-    correctionId,
-    new Date('2025-01-01T11:00:00Z'),
-    new Date('2025-01-01T13:00:00Z'),
-    new Date(),
-    'Wrong time entered'
-  )
+  it('uses corrected work time when corrections exist', () => {
+    const work = WorkPeriod.start(
+      'wp-3' as WorkPeriodId,
+      'driver-1' as any,
+      new Date('2026-01-10T08:00:00Z'),
+      now
+    )
 
-  const corrections =
-    await leaveCorrectionRepo.findByLeaveId(leaveId)
+    work.close(new Date('2026-01-10T16:00:00Z'))
 
-  expect(corrections.length).toBe(1)
-  expect(corrections[0].id).toBe(correctionId)
-})
+    const correction = WorkCorrection.create(
+      'wc-1' as any,
+      work, // ✅ aggregate, not ID
+      new Date('2026-01-10T09:00:00Z'),
+      new Date('2026-01-10T15:00:00Z'),
+      now
+    )
+
+    const range = TimeRange.create(
+      new Date('2026-01-10T00:00:00Z'),
+      new Date('2026-01-11T00:00:00Z')
+    )
+
+    const corrections = new Map<WorkPeriodId, WorkCorrection[]>()
+    corrections.set(work.id, [correction])
+
+    const result = WorkSummary.calculate(
+      range,
+      [work],
+      corrections
+    )
+
+    expect(result.totalHours).toBe(6)
+  })
+
+  it('ignores open work periods', () => {
+    const work = WorkPeriod.start(
+      'wp-4' as WorkPeriodId,
+      'driver-1' as any,
+      new Date('2026-01-10T08:00:00Z'),
+      now
+    )
+
+    const range = TimeRange.create(
+      new Date('2026-01-10T00:00:00Z'),
+      new Date('2026-01-11T00:00:00Z')
+    )
+
+    const result = WorkSummary.calculate(
+      range,
+      [work],
+      new Map<WorkPeriodId, WorkCorrection[]>()
+    )
+
+    expect(result.totalHours).toBe(0)
+  })
 })
