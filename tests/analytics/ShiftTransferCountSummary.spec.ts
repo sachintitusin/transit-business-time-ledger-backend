@@ -22,7 +22,7 @@ describe('ShiftTransferCountSummary', () => {
       'tr-2',
       'wp-2' as WorkPeriodId,
       'driver-3' as DriverId,
-      null,
+      'driver-2' as DriverId, // ✅ Origin required
       t2
     ),
     ShiftTransferEvent.create(
@@ -40,10 +40,7 @@ describe('ShiftTransferCountSummary', () => {
       new Date('2026-01-10T23:59:59Z')
     )
 
-    const result = ShiftTransferCountSummary.calculate(
-      range,
-      events
-    )
+    const result = ShiftTransferCountSummary.calculate(range, events)
 
     expect(result.totalTransfers).toBe(2)
   })
@@ -54,10 +51,7 @@ describe('ShiftTransferCountSummary', () => {
       new Date('2026-01-13T00:00:00Z')
     )
 
-    const result = ShiftTransferCountSummary.calculate(
-      range,
-      events
-    )
+    const result = ShiftTransferCountSummary.calculate(range, events)
 
     expect(result.totalTransfers).toBe(0)
   })
@@ -68,10 +62,7 @@ describe('ShiftTransferCountSummary', () => {
       new Date('2026-01-31T23:59:59Z')
     )
 
-    const result = ShiftTransferCountSummary.calculate(
-      range,
-      events
-    )
+    const result = ShiftTransferCountSummary.calculate(range, events)
 
     expect(result.totalTransfers).toBe(3)
   })

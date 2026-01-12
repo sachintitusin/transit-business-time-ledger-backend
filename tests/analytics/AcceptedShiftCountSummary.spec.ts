@@ -15,7 +15,7 @@ describe('AcceptedShiftCountSummary', () => {
   const t3 = new Date('2026-01-11T09:00:00Z')
 
   const events = [
-    // Accepted by driverA from driverB
+    // Transfer from driverB to driverA
     ShiftTransferEvent.create(
       'tr-1',
       'wp-1' as WorkPeriodId,
@@ -24,16 +24,16 @@ describe('AcceptedShiftCountSummary', () => {
       t1
     ),
 
-    // Unassigned → driverA (NOT an accepted shift)
+    // Transfer from driverC to driverA
     ShiftTransferEvent.create(
       'tr-2',
       'wp-2' as WorkPeriodId,
       driverA,
-      null,
+      driverC, // ✅ Origin required
       t2
     ),
 
-    // Accepted by driverB from driverC
+    // Transfer from driverC to driverB
     ShiftTransferEvent.create(
       'tr-3',
       'wp-3' as WorkPeriodId,
@@ -42,7 +42,7 @@ describe('AcceptedShiftCountSummary', () => {
       t2
     ),
 
-    // Accepted by driverA, but outside range
+    // Transfer from driverC to driverA (outside range)
     ShiftTransferEvent.create(
       'tr-4',
       'wp-4' as WorkPeriodId,
@@ -58,14 +58,9 @@ describe('AcceptedShiftCountSummary', () => {
       new Date('2026-01-10T23:59:59Z')
     )
 
-    const result =
-      AcceptedShiftCountSummary.calculate(
-        range,
-        driverA,
-        events
-      )
+    const result = AcceptedShiftCountSummary.calculate(range, driverA, events)
 
-    expect(result.acceptedShifts).toBe(1)
+    expect(result.acceptedShifts).toBe(2) // ✅ Now counts both transfers to driverA
   })
 
   it('returns zero when no accepted shifts match', () => {
@@ -74,30 +69,20 @@ describe('AcceptedShiftCountSummary', () => {
       new Date('2026-01-13T00:00:00Z')
     )
 
-    const result =
-      AcceptedShiftCountSummary.calculate(
-        range,
-        driverA,
-        events
-      )
+    const result = AcceptedShiftCountSummary.calculate(range, driverA, events)
 
     expect(result.acceptedShifts).toBe(0)
   })
 
-  it('does not count unassigned shifts as accepted', () => {
+  it('counts all transfers received by a driver in range', () => {
     const range = TimeRange.create(
       new Date('2026-01-10T00:00:00Z'),
       new Date('2026-01-10T23:59:59Z')
     )
 
-    const result =
-      AcceptedShiftCountSummary.calculate(
-        range,
-        driverA,
-        events
-      )
+    const result = AcceptedShiftCountSummary.calculate(range, driverA, events)
 
-    expect(result.acceptedShifts).toBe(1)
+    expect(result.acceptedShifts).toBe(2)
   })
 
   it('counts only shifts accepted by the given driver', () => {
@@ -106,12 +91,7 @@ describe('AcceptedShiftCountSummary', () => {
       new Date('2026-01-11T23:59:59Z')
     )
 
-    const result =
-      AcceptedShiftCountSummary.calculate(
-        range,
-        driverB,
-        events
-      )
+    const result = AcceptedShiftCountSummary.calculate(range, driverB, events)
 
     expect(result.acceptedShifts).toBe(1)
   })

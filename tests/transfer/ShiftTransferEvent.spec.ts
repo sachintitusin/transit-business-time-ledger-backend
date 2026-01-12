@@ -24,31 +24,6 @@ describe('ShiftTransferEvent (domain)', () => {
     expect(event.createdAt).toEqual(now)
   })
 
-  it('creates an accepted shift when fromDriverId is null', () => {
-    const event = ShiftTransferEvent.create(
-      'transfer-2',
-      'wp-2' as WorkPeriodId,
-      'driver-3' as DriverId,
-      null,
-      now
-    )
-
-    expect(event.fromDriverId).toBeNull()
-    expect(event.isAcceptedShift()).toBe(false)
-  })
-
-  it('identifies accepted shifts correctly', () => {
-    const event = ShiftTransferEvent.create(
-      'transfer-3',
-      'wp-3' as WorkPeriodId,
-      'driver-4' as DriverId,
-      'driver-2' as DriverId,
-      now
-    )
-
-    expect(event.isAcceptedShift()).toBe(true)
-  })
-
   it('throws if target driver is missing', () => {
     expect(() =>
       ShiftTransferEvent.create(
@@ -61,11 +36,23 @@ describe('ShiftTransferEvent (domain)', () => {
     ).toThrow(DomainError)
   })
 
-  it('throws if createdAt is not a valid date', () => {
+  it('throws if origin driver is missing', () => {
     expect(() =>
       ShiftTransferEvent.create(
         'transfer-5',
         'wp-5' as WorkPeriodId,
+        'driver-2' as DriverId,
+        null as any, // ❌ Origin required
+        now
+      )
+    ).toThrow('Origin driver must be specified')
+  })
+
+  it('throws if createdAt is not a valid date', () => {
+    expect(() =>
+      ShiftTransferEvent.create(
+        'transfer-6',
+        'wp-6' as WorkPeriodId,
         'driver-2' as DriverId,
         'driver-1' as DriverId,
         new Date('invalid-date')
@@ -73,17 +60,42 @@ describe('ShiftTransferEvent (domain)', () => {
     ).toThrow(DomainError)
   })
 
+  it('throws when transferring to the same driver', () => {
+    expect(() =>
+      ShiftTransferEvent.create(
+        'transfer-7',
+        'wp-7' as WorkPeriodId,
+        'driver-1' as DriverId,
+        'driver-1' as DriverId, // ❌ Same driver
+        now
+      )
+    ).toThrow('Cannot transfer a shift to the same driver')
+  })
+
+  it('throws when workPeriodId is missing', () => {
+    expect(() =>
+      ShiftTransferEvent.create(
+        'transfer-8',
+        null as any,
+        'driver-1' as DriverId,
+        'driver-2' as DriverId,
+        now
+      )
+    ).toThrow(DomainError)
+  })
+
   it('reconstitutes an event without validation', () => {
     const event = ShiftTransferEvent.reconstitute(
-      'transfer-6',
-      'wp-6' as WorkPeriodId,
+      'transfer-9',
+      'wp-9' as WorkPeriodId,
       'driver-5' as DriverId,
-      null,
+      'driver-4' as DriverId,
       now,
       'Imported from persistence'
     )
 
-    expect(event.id).toBe('transfer-6')
+    expect(event.id).toBe('transfer-9')
+    expect(event.fromDriverId).toBe('driver-4')
     expect(event.reason).toBe('Imported from persistence')
   })
 })

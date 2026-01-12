@@ -2,41 +2,50 @@ import { describe, it, expect } from 'vitest'
 import { InMemoryWorkPeriodRepository } from '../fakes/InMemoryWorkPeriodRepository'
 import { InMemoryLeaveRepository } from '../fakes/InMemoryLeaveRepository'
 import { InMemoryLeaveCorrectionRepository } from '../fakes/InMemoryLeaveCorrectionRepository'
-import { StartWorkService } from '../../src/application/services/work/StartWorkService'
-import { CloseWorkService } from '../../src/application/services/work/CloseWorkService'
-import { RecordLeaveService } from '../../src/application/services/leave/RecordLeaveService'
-import { DriverId, LeaveId, WorkPeriodId } from '../../src/domain/shared/types'
-import { CorrectWorkService } from '../../src/application/services/work/CorrectWorkService'
 import { InMemoryWorkCorrectionRepository } from '../fakes/InMemoryWorkCorrectionRepository'
 
+import { StartWorkService } from '../../src/application/services/work/StartWorkService'
+import { CloseWorkService } from '../../src/application/services/work/CloseWorkService'
+import { CorrectWorkService } from '../../src/application/services/work/CorrectWorkService'
+import { RecordLeaveService } from '../../src/application/services/leave/RecordLeaveService'
+
+import { FakeTransactionManager } from '../fakes/FakeTransactionManager'
+import { DriverId, LeaveId, WorkPeriodId } from '../../src/domain/shared/types'
+
 describe('Work–Leave overlap policy', () => {
-it('rejects closing work that overlaps existing leave', async () => {
+
+  it('rejects closing work that overlaps existing leave', async () => {
     const workRepo = new InMemoryWorkPeriodRepository()
+    const workCorrectionRepo = new InMemoryWorkCorrectionRepository()
     const leaveRepo = new InMemoryLeaveRepository()
     const leaveCorrectionRepo = new InMemoryLeaveCorrectionRepository()
+    const tx = new FakeTransactionManager()
 
-    const startWork = new StartWorkService(workRepo)
+    const startWork = new StartWorkService(workRepo, tx)
     const closeWork = new CloseWorkService(
       workRepo,
       leaveRepo,
-      leaveCorrectionRepo
+      leaveCorrectionRepo,
+      tx
     )
     const recordLeave = new RecordLeaveService(
       leaveRepo,
-      workRepo
+      workRepo,
+      workCorrectionRepo,
+      tx
     )
 
     const driverId = 'driver-1' as DriverId
     const workId = 'work-1' as WorkPeriodId
     const leaveId = 'leave-1' as LeaveId
 
-    await recordLeave.execute(
+    await recordLeave.execute({
       driverId,
       leaveId,
-      new Date('2025-01-01T12:00:00Z'),
-      new Date('2025-01-01T14:00:00Z'),
-      new Date()
-    )
+      startTime: new Date('2025-01-01T12:00:00Z'),
+      endTime: new Date('2025-01-01T14:00:00Z'),
+      now: new Date(),
+    })
 
     await startWork.execute(
       driverId,
@@ -51,117 +60,127 @@ it('rejects closing work that overlaps existing leave', async () => {
   })
 
   it('rejects work correction that causes overlap with leave', async () => {
-  const workRepo = new InMemoryWorkPeriodRepository()
-  const workCorrectionRepo = new InMemoryWorkCorrectionRepository()
-  const leaveRepo = new InMemoryLeaveRepository()
-  const leaveCorrectionRepo = new InMemoryLeaveCorrectionRepository()
+    const workRepo = new InMemoryWorkPeriodRepository()
+    const workCorrectionRepo = new InMemoryWorkCorrectionRepository()
+    const leaveRepo = new InMemoryLeaveRepository()
+    const leaveCorrectionRepo = new InMemoryLeaveCorrectionRepository()
+    const tx = new FakeTransactionManager()
 
-  const startWork = new StartWorkService(workRepo)
-  const closeWork = new CloseWorkService(
-    workRepo,
-    leaveRepo,
-    leaveCorrectionRepo
-  )
-  const correctWork = new CorrectWorkService(
-    workRepo,
-    workCorrectionRepo,
-    leaveRepo,
-    leaveCorrectionRepo
-  )
-  const recordLeave = new RecordLeaveService(
-    leaveRepo,
-    workRepo
-  )
-
-  const driverId = 'driver-1' as DriverId
-  const workId = 'work-1' as WorkPeriodId
-  const correctionId = 'corr-1' as any
-  const leaveId = 'leave-1' as LeaveId
-
-  await startWork.execute(
-    driverId,
-    workId,
-    new Date('2025-01-01T09:00:00Z'),
-    new Date()
-  )
-
-  await closeWork.execute(driverId, new Date('2025-01-01T12:00:00Z'))
-
-  await recordLeave.execute(
-    driverId,
-    leaveId,
-    new Date('2025-01-01T13:00:00Z'),
-    new Date('2025-01-01T14:00:00Z'),
-    new Date()
-  )
-
-  await expect(
-    correctWork.execute(
-      driverId,
-      workId,
-      correctionId,
-      new Date('2025-01-01T10:00:00Z'),
-      new Date('2025-01-01T15:00:00Z'),
-      new Date()
+    const startWork = new StartWorkService(workRepo, tx)
+    const closeWork = new CloseWorkService(
+      workRepo,
+      leaveRepo,
+      leaveCorrectionRepo,
+      tx
     )
-  ).rejects.toThrow()
-})
+    const correctWork = new CorrectWorkService(
+      workRepo,
+      workCorrectionRepo,
+      leaveRepo,
+      leaveCorrectionRepo,
+      tx
+    )
+    const recordLeave = new RecordLeaveService(
+      leaveRepo,
+      workRepo,
+      workCorrectionRepo,
+      tx
+    )
 
-it('uses effective work time for overlap validation after correction', async () => {
-  const workRepo = new InMemoryWorkPeriodRepository()
-  const correctionRepo = new InMemoryWorkCorrectionRepository()
-  const leaveRepo = new InMemoryLeaveRepository()
-  const leaveCorrectionRepo = new InMemoryLeaveCorrectionRepository()
+    const driverId = 'driver-1' as DriverId
+    const workId = 'work-1' as WorkPeriodId
+    const correctionId = 'corr-1' as any
+    const leaveId = 'leave-1' as LeaveId
 
-  const startWork = new StartWorkService(workRepo)
-  const closeWork = new CloseWorkService(
-    workRepo,
-    leaveRepo,
-    leaveCorrectionRepo
-  )
-  const correctWork = new CorrectWorkService(
-    workRepo,
-    correctionRepo,
-    leaveRepo,
-    leaveCorrectionRepo
-  )
-  const recordLeave = new RecordLeaveService(
-    leaveRepo,
-    workRepo
-  )
-
-  const driverId = 'driver-1' as DriverId
-  const workId = 'work-1' as WorkPeriodId
-  const correctionId = 'corr-1' as any
-  const leaveId = 'leave-1' as LeaveId
-
-  await startWork.execute(
-    driverId,
-    workId,
-    new Date('2025-01-01T09:00:00Z'),
-    new Date()
-  )
-
-  await closeWork.execute(driverId, new Date('2025-01-01T12:00:00Z'))
-
-  await recordLeave.execute(
-    driverId,
-    leaveId,
-    new Date('2025-01-01T13:00:00Z'),
-    new Date('2025-01-01T14:00:00Z'),
-    new Date()
-  )
-
-  await expect(
-    correctWork.execute(
+    await startWork.execute(
       driverId,
       workId,
-      correctionId,
       new Date('2025-01-01T09:00:00Z'),
-      new Date('2025-01-01T15:00:00Z'),
       new Date()
     )
-  ).rejects.toThrow()
-})
+
+    await closeWork.execute(driverId, new Date('2025-01-01T12:00:00Z'))
+
+    await recordLeave.execute({
+      driverId,
+      leaveId,
+      startTime: new Date('2025-01-01T13:00:00Z'),
+      endTime: new Date('2025-01-01T14:00:00Z'),
+      now: new Date(),
+    })
+
+    await expect(
+      correctWork.execute({
+        driverId,
+        workPeriodId: workId,
+        correctionId,
+        correctedStartTime: new Date('2025-01-01T10:00:00Z'),
+        correctedEndTime: new Date('2025-01-01T15:00:00Z'),
+        now: new Date(),
+      })
+    ).rejects.toThrow()
+  })
+
+  it('uses effective work time for overlap validation after correction', async () => {
+    const workRepo = new InMemoryWorkPeriodRepository()
+    const correctionRepo = new InMemoryWorkCorrectionRepository()
+    const leaveRepo = new InMemoryLeaveRepository()
+    const leaveCorrectionRepo = new InMemoryLeaveCorrectionRepository()
+    const tx = new FakeTransactionManager()
+
+    const startWork = new StartWorkService(workRepo, tx)
+    const closeWork = new CloseWorkService(
+      workRepo,
+      leaveRepo,
+      leaveCorrectionRepo,
+      tx
+    )
+    const correctWork = new CorrectWorkService(
+      workRepo,
+      correctionRepo,
+      leaveRepo,
+      leaveCorrectionRepo,
+      tx
+    )
+    const recordLeave = new RecordLeaveService(
+      leaveRepo,
+      workRepo,
+      correctionRepo,
+      tx
+    )
+
+    const driverId = 'driver-1' as DriverId
+    const workId = 'work-1' as WorkPeriodId
+    const correctionId = 'corr-1' as any
+    const leaveId = 'leave-1' as LeaveId
+
+    await startWork.execute(
+      driverId,
+      workId,
+      new Date('2025-01-01T09:00:00Z'),
+      new Date()
+    )
+
+    await closeWork.execute(driverId, new Date('2025-01-01T12:00:00Z'))
+
+    await recordLeave.execute({
+      driverId,
+      leaveId,
+      startTime: new Date('2025-01-01T13:00:00Z'),
+      endTime: new Date('2025-01-01T14:00:00Z'),
+      now: new Date(),
+    })
+
+    await expect(
+      correctWork.execute({
+        driverId,
+        workPeriodId: workId,
+        correctionId,
+        correctedStartTime: new Date('2025-01-01T09:00:00Z'),
+        correctedEndTime: new Date('2025-01-01T15:00:00Z'),
+        now: new Date(),
+      })
+    ).rejects.toThrow()
+  })
 
 })
