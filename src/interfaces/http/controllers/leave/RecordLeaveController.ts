@@ -29,6 +29,7 @@ export class RecordLeaveController {
 
       res.status(201).json({ status: "leave_recorded" });
     } catch (err: any) {
+      console.error('❌ RecordLeaveController error:', err);
       res.status(400).json({
         error: err.code ?? "RECORD_LEAVE_FAILED",
         message: err.message,

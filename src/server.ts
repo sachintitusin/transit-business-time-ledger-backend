@@ -57,7 +57,7 @@ import { createAnalyticsRoutes } from "./interfaces/http/routes/analytics.routes
 // ======================================================================
 config();
 
-const app = express();
+export const app = express();
 app.use(express.json());
 
 // ======================================================================
@@ -78,7 +78,10 @@ const transactionManager = new PrismaTransactionManager();
 // Command services
 // --------------------
 const startWorkService =
-  new StartWorkService(workPeriodRepository);
+  new StartWorkService(
+    workPeriodRepository,
+    transactionManager
+  );
 
 const closeWorkService =
   new CloseWorkService(
@@ -101,6 +104,7 @@ const recordLeaveService =
   new RecordLeaveService(
     leaveRepository,
     workPeriodRepository,
+    workCorrectionRepository,
     transactionManager
   );
 
@@ -209,8 +213,12 @@ app.use(
 // Server
 // ======================================================================
 
+
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Only start server if this file is run directly (not imported by tests)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
