@@ -98,15 +98,15 @@ model LeaveCorrection {
 model ShiftTransferEvent {
   id                     String   @id @default(uuid()) @db.Uuid
   driverId               String   @db.Uuid              // receiving driver
-  transferredFromDriverId String?  @db.Uuid              // optional giver
-  workPeriodId           String?  @db.Uuid              // contextual only
+  transferredFromDriverId String  @db.Uuid              // optional giver
+  workPeriodId           String  @db.Uuid              // contextual only
   reason                 String?
   createdAt              DateTime @default(now())
 
   /// Relations
   driver                Driver     @relation("TransferReceiver", fields: [driverId], references: [id], onDelete: Restrict)
-  transferredFromDriver Driver?    @relation("TransferGiver", fields: [transferredFromDriverId], references: [id], onDelete: Restrict)
-  workPeriod            WorkPeriod? @relation(fields: [workPeriodId], references: [id], onDelete: Restrict)
+  transferredFromDriver Driver    @relation("TransferGiver", fields: [transferredFromDriverId], references: [id], onDelete: Restrict)
+  workPeriod            WorkPeriod @relation(fields: [workPeriodId], references: [id], onDelete: Restrict)
 
   @@index([driverId, createdAt])
   @@index([workPeriodId])
