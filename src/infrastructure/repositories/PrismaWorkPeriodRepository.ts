@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { transactionContext } from "../prisma/transactionContext";
 
 import { WorkPeriodRepository } from "../../application/ports/WorkPeriodRepository";
@@ -24,10 +25,26 @@ export class PrismaWorkPeriodRepository implements WorkPeriodRepository {
         driverId: driverId as any,
         status: "OPEN",
       },
+      orderBy: { declaredStartTime: "asc" },
     });
 
     if (!row) return null;
     return this.reconstitute(row);
+  }
+
+  /**
+   * ✅ NEW — required for LeaveCorrection overlap checks
+   * Returns ALL work periods (OPEN + CLOSED) for a driver
+   */
+  async findByDriver(driverId: DriverId): Promise<WorkPeriod[]> {
+    const rows = await transactionContext.get().workPeriod.findMany({
+      where: {
+        driverId: driverId as any,
+      },
+      orderBy: { declaredStartTime: "asc" },
+    });
+
+    return rows.map((r) => this.reconstitute(r));
   }
 
   async findClosedByDriver(driverId: DriverId): Promise<WorkPeriod[]> {
@@ -49,47 +66,90 @@ export class PrismaWorkPeriodRepository implements WorkPeriodRepository {
    * - CLOSED is immutable forever
    */
   async save(workPeriod: WorkPeriod): Promise<void> {
-    const existing = await transactionContext.get().workPeriod.findUnique({
-      where: { id: workPeriod.id as any },
-    });
+    const prisma = transactionContext.get()
 
-    // 1️⃣ First persistence (OPEN)
+    let workPeriodId = workPeriod.id as any
+
+    if (!workPeriodId) {
+      workPeriodId = randomUUID()
+      ;(workPeriod as any)._id = workPeriodId
+    }
+
+    const existing = await prisma.workPeriod.findUnique({
+      where: { id: workPeriodId },
+    })
+
+    // ------------------------------------------------------------
+    // 1️⃣ First persistence (OPEN only)
+    // ------------------------------------------------------------
     if (!existing) {
-      await transactionContext.get().workPeriod.create({
+      if (workPeriod.status !== DomainWorkPeriodStatus.OPEN) {
+        throw new Error(
+          'Invariant violation: initial persistence must be OPEN'
+        )
+      }
+
+      await prisma.workPeriod.create({
         data: {
-          id: workPeriod.id as any,
+          id: workPeriodId,
           driverId: workPeriod.driverId as any,
           declaredStartTime: workPeriod.declaredStartTime,
-          status: "OPEN",
+          status: 'OPEN',
           createdAt: workPeriod.createdAt,
         },
-      });
-      return;
+      })
+      return
     }
 
-    // 2️⃣ Valid transition: OPEN → CLOSED
+    // ------------------------------------------------------------
+    // 2️⃣ OPEN → CLOSED (real transition)
+    // ------------------------------------------------------------
     if (
-      existing.status === "OPEN" &&
+      existing.status === 'OPEN' &&
       workPeriod.status === DomainWorkPeriodStatus.CLOSED
     ) {
-      await transactionContext.get().workPeriod.update({
-        where: {
-          id: workPeriod.id as any,
-          status: "OPEN", // DB-level guard
-        },
+      if (!workPeriod.declaredEndTime) {
+        throw new Error(
+          'Invariant violation: closing work without declaredEndTime'
+        )
+      }
+
+      const result = await prisma.workPeriod.updateMany({
+        where: { id: workPeriodId, status: 'OPEN' },
         data: {
           declaredEndTime: workPeriod.declaredEndTime,
-          status: "CLOSED",
+          status: 'CLOSED',
         },
-      });
-      return;
+      })
+
+      if (result.count !== 1) {
+        throw new Error(
+          'Invariant violation: failed OPEN → CLOSED transition'
+        )
+      }
+
+      return
     }
 
-    // 3️⃣ Everything else is illegal
+    // ------------------------------------------------------------
+    // 3️⃣ CLOSED → CLOSED (idempotent save, NO mutation)
+    // ------------------------------------------------------------
+    if (
+      existing.status === 'CLOSED' &&
+      workPeriod.status === DomainWorkPeriodStatus.CLOSED
+    ) {
+      return // ✅ allow silently
+    }
+
+    // ------------------------------------------------------------
+    // 4️⃣ Everything else is illegal
+    // ------------------------------------------------------------
     throw new Error(
-      "Invariant violation: cannot modify a closed work period"
-    );
+      'Invariant violation: illegal work period mutation'
+    )
   }
+
+
 
   // ------------------------------------------------------------------
   // Reconstitution (infra-only, trusted historical data)
