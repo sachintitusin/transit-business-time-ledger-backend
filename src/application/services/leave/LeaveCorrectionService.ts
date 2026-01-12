@@ -7,12 +7,14 @@ import { LeaveCorrection } from '../../../domain/leave/LeaveCorrection'
 import { EffectiveLeaveTime } from '../../../domain/leave/EffectiveLeaveTime'
 import { EffectiveWorkTime } from '../../../domain/work/EffectiveWorkTime'
 import { WorkLeaveOverlapPolicy } from '../../policies/WorkLeaveOverlapPolicy'
+import { TimeRange } from '../../../domain/shared/TimeRange'
 import {
   DriverId,
   LeaveId,
   LeaveCorrectionId,
 } from '../../../domain/shared/types'
 import { DomainError } from '../../../domain/shared/DomainError'
+import { WorkPeriodStatus } from '../../../domain/work/WorkPeriodStatus'
 
 export class LeaveCorrectionService {
   constructor(
@@ -42,7 +44,9 @@ export class LeaveCorrectionService {
         reason,
       } = command
 
+      // ------------------------------------------------------------
       // 1. Load leave
+      // ------------------------------------------------------------
       const leave = await this.leaveRepository.findById(leaveId)
 
       if (!leave || leave.driverId !== driverId) {
@@ -52,7 +56,9 @@ export class LeaveCorrectionService {
         )
       }
 
+      // ------------------------------------------------------------
       // 2. Create correction (domain validation)
+      // ------------------------------------------------------------
       const correction = LeaveCorrection.create(
         correctionId,
         leave,
@@ -62,32 +68,58 @@ export class LeaveCorrectionService {
         reason
       )
 
+      // ------------------------------------------------------------
       // 3. Load existing corrections
+      // ------------------------------------------------------------
       const existingCorrections =
         await this.leaveCorrectionRepository.findByLeaveId(leave.id)
 
       const allCorrections = [...existingCorrections, correction]
 
-      // 4. Compute effective leave
+      // ------------------------------------------------------------
+      // 4. Compute CANDIDATE effective leave
+      // ------------------------------------------------------------
       const effectiveLeave =
         EffectiveLeaveTime.from(leave, allCorrections)
 
-      // 5. Load active work (if any)
-      const openWork =
-        await this.workPeriodRepository.findOpenByDriver(driverId)
+      // ------------------------------------------------------------
+      // 5. Load ALL work periods for driver
+      // ------------------------------------------------------------
+      const workPeriods =
+        await this.workPeriodRepository.findByDriver(driverId)
 
-      if (openWork) {
-        const effectiveWork =
-          EffectiveWorkTime.from(openWork, [])
+      // ------------------------------------------------------------
+      // 6. Enforce overlap against each work period
+      // ------------------------------------------------------------
+      for (const work of workPeriods) {
+        if (work.status === WorkPeriodStatus.OPEN) {
+          // OPEN work → manual range
+          const openWorkRange = TimeRange.create(
+            work.declaredStartTime,
+            now
+          )
 
-        // 6. Apply cross-domain policy
-        WorkLeaveOverlapPolicy.assertNoOverlap(
-          effectiveWork,
-          [effectiveLeave]
-        )
+          if (openWorkRange.overlaps(effectiveLeave.range)) {
+            throw new DomainError(
+              'WORK_OVERLAPS_LEAVE',
+              'Leave correction overlaps with open work period'
+            )
+          }
+        } else {
+          // CLOSED work → effective work time
+          const effectiveWork =
+            EffectiveWorkTime.from(work, [])
+
+          WorkLeaveOverlapPolicy.assertNoOverlap(
+            effectiveWork,
+            [effectiveLeave]
+          )
+        }
       }
 
+      // ------------------------------------------------------------
       // 7. Persist correction (atomic)
+      // ------------------------------------------------------------
       await this.leaveCorrectionRepository.save(correction)
     })
   }

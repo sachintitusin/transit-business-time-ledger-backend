@@ -15,7 +15,7 @@ export class RecordShiftTransferService {
     transferId: string
     workPeriodId: WorkPeriodId
     toDriverId: DriverId
-    fromDriverId: DriverId | null
+    fromDriverId: DriverId
     createdAt: Date
     reason?: string
   }): Promise<void> {

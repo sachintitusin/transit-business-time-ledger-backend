@@ -3,11 +3,12 @@ import { LeaveRepository } from '../../ports/LeaveRepository'
 import { LeaveCorrectionRepository } from '../../ports/LeaveCorrectionRepository'
 import { TransactionManager } from '../../ports/TransactionManager'
 
-import { EffectiveWorkTime } from '../../../domain/work/EffectiveWorkTime'
 import { EffectiveLeaveTime } from '../../../domain/leave/EffectiveLeaveTime'
 import { WorkLeaveOverlapPolicy } from '../../policies/WorkLeaveOverlapPolicy'
 import { NoActiveWorkPeriod } from '../../../domain/work/WorkPeriodErrors'
 import { DriverId } from '../../../domain/shared/types'
+import { DomainError } from '../../../domain/shared/DomainError'
+import { TimeRange } from '../../../domain/shared/TimeRange'
 
 export class CloseWorkService {
   constructor(
@@ -30,20 +31,22 @@ export class CloseWorkService {
         throw NoActiveWorkPeriod()
       }
 
-      // 2. Close work (domain validation)
-      workPeriod.close(endTime)
+      // 2. Create candidate work range (don't close yet)
+      const candidateWorkRange = TimeRange.create(
+        workPeriod.declaredStartTime,
+        endTime
+      )
 
       // 3. Load leave data
-      const leaves = await this.leaveRepository.findByDriver(driverId)
+      const leaves =
+        await this.leaveRepository.findByDriver(driverId)
+
       const leaveIds = leaves.map(l => l.id)
 
       const leaveCorrections =
         await this.leaveCorrectionRepository.findByLeaveIds(leaveIds)
 
-      // 4. Compute effective times
-      const effectiveWork =
-        EffectiveWorkTime.from(workPeriod, [])
-
+      // 4. Compute effective leaves
       const effectiveLeaves = leaves.map(leave =>
         EffectiveLeaveTime.from(
           leave,
@@ -51,13 +54,26 @@ export class CloseWorkService {
         )
       )
 
-      // 5. Apply cross-domain policy
-      WorkLeaveOverlapPolicy.assertNoOverlap(
-        effectiveWork,
-        effectiveLeaves
-      )
+      // 5. Check for overlaps (I16 invariant)
+      for (const effectiveLeave of effectiveLeaves) {
+        if (candidateWorkRange.overlaps(effectiveLeave.range)) {
+          throw new DomainError(
+            'WORK_OVERLAPS_LEAVE',
+            'Cannot close work period: overlaps with recorded leave',
+            {
+              workStart: candidateWorkRange.start,
+              workEnd: candidateWorkRange.end,
+              leaveStart: effectiveLeave.range.start,
+              leaveEnd: effectiveLeave.range.end,
+            }
+          )
+        }
+      }
 
-      // 6. Persist (atomic)
+      // 6. Now safe to close
+      workPeriod.close(endTime)
+
+      // 7. Persist
       await this.workPeriodRepository.save(workPeriod)
     })
   }
