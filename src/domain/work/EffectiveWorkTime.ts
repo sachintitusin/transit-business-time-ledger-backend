@@ -11,6 +11,25 @@ export class EffectiveWorkTime {
     this.range = range
   }
 
+  /**
+   * Used ONLY for validation during work close.
+   * Does NOT require work to be CLOSED.
+   */
+  static fromClosing(
+    workPeriod: WorkPeriod,
+    endTime: Date
+  ): EffectiveWorkTime {
+    const range = TimeRange.create(
+      workPeriod.declaredStartTime,
+      endTime
+    )
+
+    return new EffectiveWorkTime(range)
+  }
+
+  /**
+   * Used ONLY for finalized work (analytics, reporting)
+   */
   static from(
     workPeriod: WorkPeriod,
     corrections: WorkCorrection[]
@@ -22,7 +41,6 @@ export class EffectiveWorkTime {
       )
     }
 
-    // Find latest correction (if any)
     const latestCorrection = corrections
       .filter(c => c.workPeriodId === workPeriod.id)
       .sort(
@@ -37,9 +55,7 @@ export class EffectiveWorkTime {
       ? latestCorrection.correctedEndTime
       : workPeriod.declaredEndTime!
 
-    const range = TimeRange.create(start, end)
-
-    return new EffectiveWorkTime(range)
+    return new EffectiveWorkTime(TimeRange.create(start, end))
   }
 
   durationHours(): number {

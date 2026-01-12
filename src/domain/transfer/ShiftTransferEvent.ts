@@ -5,7 +5,7 @@ export class ShiftTransferEvent {
   readonly id: string
   readonly workPeriodId: WorkPeriodId
   readonly toDriverId: DriverId
-  readonly fromDriverId: DriverId | null
+  readonly fromDriverId: DriverId  // ✅ REQUIRED - always has origin
   readonly createdAt: Date
   readonly reason?: string
 
@@ -13,7 +13,7 @@ export class ShiftTransferEvent {
     id: string,
     workPeriodId: WorkPeriodId,
     toDriverId: DriverId,
-    fromDriverId: DriverId | null,
+    fromDriverId: DriverId,  // ✅ Not nullable
     createdAt: Date,
     reason?: string
   ) {
@@ -29,14 +29,37 @@ export class ShiftTransferEvent {
     id: string,
     workPeriodId: WorkPeriodId,
     toDriverId: DriverId,
-    fromDriverId: DriverId | null,
+    fromDriverId: DriverId,  // ✅ Required
     createdAt: Date,
     reason?: string
   ): ShiftTransferEvent {
+    if (!workPeriodId) {
+      throw new DomainError(
+        'INVALID_SHIFT_TRANSFER',
+        'Work period ID must be specified'
+      )
+    }
+
     if (!toDriverId) {
       throw new DomainError(
         'INVALID_SHIFT_TRANSFER',
         'Target driver must be specified'
+      )
+    }
+
+    // ✅ NEW: fromDriverId is required (every shift must have an origin)
+    if (!fromDriverId) {
+      throw new DomainError(
+        'INVALID_SHIFT_TRANSFER',
+        'Origin driver must be specified'
+      )
+    }
+
+    // ✅ Self-transfer validation
+    if (fromDriverId === toDriverId) {
+      throw new DomainError(
+        'INVALID_SHIFT_TRANSFER',
+        'Cannot transfer a shift to the same driver'
       )
     }
 
@@ -61,7 +84,7 @@ export class ShiftTransferEvent {
     id: string,
     workPeriodId: WorkPeriodId,
     toDriverId: DriverId,
-    fromDriverId: DriverId | null,
+    fromDriverId: DriverId,  // ✅ Not nullable
     createdAt: Date,
     reason?: string
   ): ShiftTransferEvent {
@@ -75,7 +98,6 @@ export class ShiftTransferEvent {
     )
   }
 
-  isAcceptedShift(): boolean {
-    return this.fromDriverId !== null
-  }
+  // ✅ REMOVED - not needed for your business model
+  // No concept of "open shifts" - every transfer has a known origin
 }
