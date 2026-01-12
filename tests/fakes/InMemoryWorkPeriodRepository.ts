@@ -32,6 +32,21 @@ export class InMemoryWorkPeriodRepository
     return result
   }
 
+  // ✅ NEW — required by repository interface
+  async findByDriver(
+    driverId: DriverId
+  ): Promise<WorkPeriod[]> {
+    const result: WorkPeriod[] = []
+
+    for (const wp of this.store.values()) {
+      if (wp.driverId === driverId) {
+        result.push(wp)
+      }
+    }
+
+    return result
+  }
+
   async findById(
     id: WorkPeriodId
   ): Promise<WorkPeriod | null> {
