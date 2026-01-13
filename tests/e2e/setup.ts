@@ -1,31 +1,39 @@
+// tests/e2e/setup.ts
 import { afterEach, beforeAll, beforeEach, afterAll } from "vitest";
 import { prisma } from "../../src/infrastructure/prisma/prismaClient";
+import { 
+  TEST_DRIVER_1, 
+  TEST_DRIVER_2, 
+  TOKEN_DRIVER_1, 
+  TOKEN_DRIVER_2 
+} from "../helpers/auth.helper";
 
-export const TEST_DRIVER_ID = "00000000-0000-0000-0000-000000000001";
-export const OTHER_DRIVER_ID = "00000000-0000-0000-0000-000000000002";
+// ✅ Use IDs from auth.helper
+export const TEST_DRIVER_ID = TEST_DRIVER_1;
+export const OTHER_DRIVER_ID = TEST_DRIVER_2;
+export const TEST_AUTH_HEADER = { Authorization: `Bearer ${TOKEN_DRIVER_1}` };
+export const OTHER_AUTH_HEADER = { Authorization: `Bearer ${TOKEN_DRIVER_2}` };
 
 beforeAll(async () => {
-  // Clean everything first
   await cleanupAll();
   
-  // Seed primary test driver
+  // ✅ Create drivers with matching IDs
   await prisma.driver.upsert({
-    where: { id: TEST_DRIVER_ID },
+    where: { id: TEST_DRIVER_ID }, // Now uses 11111111-1111-1111-1111-111111111111
     update: {},
     create: {
       id: TEST_DRIVER_ID,
-      email: "e2e.driver@local.test",
+      email: `${TEST_DRIVER_ID}@test.com`, // Matches auth.helper email format
       name: "E2E Driver",
     },
   });
 
-  // Seed secondary driver
   await prisma.driver.upsert({
-    where: { id: OTHER_DRIVER_ID },
+    where: { id: OTHER_DRIVER_ID }, // Now uses 22222222-2222-2222-2222-222222222222
     update: {},
     create: {
       id: OTHER_DRIVER_ID,
-      email: "e2e.other@local.test",
+      email: `${OTHER_DRIVER_ID}@test.com`,
       name: "Other Driver",
     },
   });
@@ -45,7 +53,6 @@ afterAll(async () => {
 });
 
 async function cleanupAll() {
-  // Delete in correct order
   await prisma.shiftTransferEvent.deleteMany({});
   await prisma.workCorrection.deleteMany({});
   await prisma.leaveCorrection.deleteMany({});
