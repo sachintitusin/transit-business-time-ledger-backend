@@ -3,6 +3,7 @@
 export interface JwtPayload {
   sub: string;        // driverId (uuid)
   email?: string;
+  driverId: string;
 }
 
 export interface JwtService {
