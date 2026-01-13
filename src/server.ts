@@ -267,6 +267,19 @@ app.use(
   )
 );
 
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("❌ Unhandled error in controller:");
+  console.error(err);
+  
+  res.status(500).json({
+    error: {
+      code: "INTERNAL_ERROR",
+      message: err.message || "Internal server error",
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    }
+  });
+});
+
 // ======================================================================
 // Server
 // ======================================================================
