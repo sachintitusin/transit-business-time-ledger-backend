@@ -23,7 +23,7 @@ export class AuthenticateDriverService {
   async execute(
     googleIdToken: string
   ): Promise<{ driverId: DriverId; token: string }> {
-    return this.txManager.execute(async () => {
+    return this.txManager.run(async () => {
       // 1. Verify Google token
       const profile = await this.googleVerifier.verify(googleIdToken);
 

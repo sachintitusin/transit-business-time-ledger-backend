@@ -1,4 +1,4 @@
-import { PrismaClient } from "../../../generated/prisma/client";
+import { PrismaClient } from "../../generated/prisma/client";
 
 
 /**
@@ -11,4 +11,6 @@ export type DbClient = {
   leaveEvent: PrismaClient["leaveEvent"];
   leaveCorrection: PrismaClient["leaveCorrection"];
   shiftTransferEvent: PrismaClient["shiftTransferEvent"];
+  authIdentity: PrismaClient["authIdentity"];
+  driver: PrismaClient["driver"]
 };
