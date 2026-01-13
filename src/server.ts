@@ -2,13 +2,25 @@ import express from "express";
 import { config } from "dotenv";
 
 // ======================================================================
-// Infrastructure
+// Infrastructure – Repositories
 // ======================================================================
 import { PrismaWorkPeriodRepository } from "./infrastructure/repositories/PrismaWorkPeriodRepository";
 import { PrismaWorkCorrectionRepository } from "./infrastructure/repositories/PrismaWorkCorrectionRepository";
 import { PrismaLeaveRepository } from "./infrastructure/repositories/PrismaLeaveRepository";
 import { PrismaLeaveCorrectionRepository } from "./infrastructure/repositories/PrismaLeaveCorrectionRepository";
 import { PrismaShiftTransferRepository } from "./infrastructure/repositories/PrismaShiftTransferRepository";
+import { PrismaDriverRepository } from "./infrastructure/repositories/PrismaDriverRepository";
+import { PrismaAuthIdentityRepository } from "./infrastructure/repositories/PrismaAuthIdentityRepository";
+
+// ======================================================================
+// Infrastructure – Auth
+// ======================================================================
+import { GoogleTokenVerifierImpl } from "./infrastructure/auth/GoogleTokenVerifierImpl";
+import { JwtServiceImpl } from "./infrastructure/auth/JwtServiceImpl";
+
+// ======================================================================
+// Infrastructure – Transaction
+// ======================================================================
 import { PrismaTransactionManager } from "./infrastructure/prisma/PrismaTransactionManager";
 
 // ======================================================================
@@ -17,14 +29,13 @@ import { PrismaTransactionManager } from "./infrastructure/prisma/PrismaTransact
 import { StartWorkService } from "./application/services/work/StartWorkService";
 import { CloseWorkService } from "./application/services/work/CloseWorkService";
 import { CorrectWorkService } from "./application/services/work/CorrectWorkService";
-
 import { RecordLeaveService } from "./application/services/leave/RecordLeaveService";
 import { LeaveCorrectionService } from "./application/services/leave/LeaveCorrectionService";
-
 import { RecordShiftTransferService } from "./application/services/transfer/RecordShiftTransferService";
+import { AuthenticateDriverService } from "./application/services/auth/AuthenticateDriverService";
 
 // ======================================================================
-// Application Services (Queries / Analytics)
+// Application Services (Queries)
 // ======================================================================
 import { GetLeaveCountSummaryService } from "./application/services/analytics/GetLeaveCountSummaryService";
 import { GetWorkSummaryService } from "./application/services/analytics/GetWorkSummaryService";
@@ -35,14 +46,12 @@ import { GetWorkSummaryService } from "./application/services/analytics/GetWorkS
 import { StartWorkController } from "./interfaces/http/controllers/work/StartWorkController";
 import { CloseWorkController } from "./interfaces/http/controllers/work/CloseWorkController";
 import { CorrectWorkController } from "./interfaces/http/controllers/work/CorrectWorkController";
-
 import { RecordLeaveController } from "./interfaces/http/controllers/leave/RecordLeaveController";
 import { LeaveCorrectionController } from "./interfaces/http/controllers/leave/LeaveCorrectionController";
-
 import { RecordShiftTransferController } from "./interfaces/http/controllers/transfer/RecordShiftTransferController";
-
 import { GetLeaveCountSummaryController } from "./interfaces/http/controllers/analytics/GetLeaveCountSummaryController";
 import { GetWorkSummaryController } from "./interfaces/http/controllers/analytics/GetWorkSummaryController";
+import { AuthenticateDriverController } from "./interfaces/http/controllers/auth/AuthenticateDriverController";
 
 // ======================================================================
 // Routes
@@ -51,6 +60,12 @@ import { createWorkRoutes } from "./interfaces/http/routes/work.routes";
 import { createLeaveRoutes } from "./interfaces/http/routes/leave.routes";
 import { createTransferRoutes } from "./interfaces/http/routes/transfer.routes";
 import { createAnalyticsRoutes } from "./interfaces/http/routes/analytics.routes";
+import { createAuthRoutes } from "./interfaces/http/routes/auth.routes";
+
+// ======================================================================
+// Middleware
+// ======================================================================
+import { requireAuth } from "./interfaces/http/middlewares/requireAuth";
 
 // ======================================================================
 // Bootstrap
@@ -64,18 +79,37 @@ app.use(express.json());
 // Dependency Injection (Composition Root)
 // ======================================================================
 
+// --------------------
 // Repositories
+// --------------------
 const workPeriodRepository = new PrismaWorkPeriodRepository();
 const workCorrectionRepository = new PrismaWorkCorrectionRepository();
 const leaveRepository = new PrismaLeaveRepository();
 const leaveCorrectionRepository = new PrismaLeaveCorrectionRepository();
 const shiftTransferRepository = new PrismaShiftTransferRepository();
 
-// Transaction manager
+const driverRepository = new PrismaDriverRepository();
+const authIdentityRepository = new PrismaAuthIdentityRepository();
+
+// --------------------
+// Transaction Manager
+// --------------------
 const transactionManager = new PrismaTransactionManager();
 
 // --------------------
-// Command services
+// Auth Infrastructure
+// --------------------
+const googleTokenVerifier =
+  new GoogleTokenVerifierImpl(process.env.GOOGLE_CLIENT_ID!);
+
+const jwtService =
+  new JwtServiceImpl(process.env.JWT_SECRET!);
+
+// Auth middleware instance
+const authMiddleware = requireAuth(jwtService);
+
+// --------------------
+// Command Services
 // --------------------
 const startWorkService =
   new StartWorkService(
@@ -122,8 +156,17 @@ const recordShiftTransferService =
     transactionManager
   );
 
+const authenticateDriverService =
+  new AuthenticateDriverService(
+    transactionManager,
+    googleTokenVerifier,
+    jwtService,
+    driverRepository,
+    authIdentityRepository
+  );
+
 // --------------------
-// Query services
+// Query Services
 // --------------------
 const getLeaveCountSummaryService =
   new GetLeaveCountSummaryService(
@@ -169,16 +212,28 @@ const getLeaveCountSummaryController =
 const getWorkSummaryController =
   new GetWorkSummaryController(getWorkSummaryService);
 
+// Auth
+const authenticateDriverController =
+  new AuthenticateDriverController(authenticateDriverService);
+
 // ======================================================================
 // Routes
 // ======================================================================
 
+// Public
 app.get("/health", (_, res) => {
   res.json({ status: "ok" });
 });
 
 app.use(
+  "/auth",
+  createAuthRoutes(authenticateDriverController)
+);
+
+// Protected
+app.use(
   "/work",
+  authMiddleware,
   createWorkRoutes(
     startWorkController,
     closeWorkController,
@@ -188,6 +243,7 @@ app.use(
 
 app.use(
   "/leave",
+  authMiddleware,
   createLeaveRoutes(
     recordLeaveController,
     leaveCorrectionController
@@ -196,6 +252,7 @@ app.use(
 
 app.use(
   "/transfer",
+  authMiddleware,
   createTransferRoutes(
     recordShiftTransferController
   )
@@ -203,6 +260,7 @@ app.use(
 
 app.use(
   "/analytics",
+  authMiddleware,
   createAnalyticsRoutes(
     getLeaveCountSummaryController,
     getWorkSummaryController
@@ -213,10 +271,9 @@ app.use(
 // Server
 // ======================================================================
 
-
 const PORT = process.env.PORT || 3000;
 
-// Only start server if this file is run directly (not imported by tests)
+// Only start server if run directly (not during tests)
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
