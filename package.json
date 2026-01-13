@@ -17,6 +17,7 @@
   "type": "commonjs",
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.0.6",
     "@types/pg": "^8.16.0",
     "@types/supertest": "^6.0.3",
@@ -36,6 +37,7 @@
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
     "google-auth-library": "^10.5.0",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.16.3"
   }
 }
