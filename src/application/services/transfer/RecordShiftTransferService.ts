@@ -29,15 +29,15 @@ export class RecordShiftTransferService {
         reason,
       } = command
 
-      // 1. Basic invariant
-      if (fromDriverId && fromDriverId === toDriverId) {
+      // Invariant: cannot transfer to self
+      if (fromDriverId === toDriverId) {
         throw new DomainError(
           'INVALID_SHIFT_TRANSFER',
           'Cannot transfer a shift to the same driver'
         )
       }
 
-      // 2. Create domain event
+      // Create domain event
       const event = ShiftTransferEvent.create(
         transferId,
         workPeriodId,
@@ -47,7 +47,7 @@ export class RecordShiftTransferService {
         reason
       )
 
-      // 3. Persist atomically
+      // Persist atomically
       await this.shiftTransferRepo.save(event)
     })
   }

@@ -3,21 +3,45 @@ import { ShiftTransferRepository } from "../../application/ports/ShiftTransferRe
 import { ShiftTransferEvent } from "../../domain/transfer/ShiftTransferEvent";
 import { DriverId, WorkPeriodId } from "../../domain/shared/types";
 import { TimeRange } from "../../domain/shared/TimeRange";
+import { DomainError } from "../../domain/shared/DomainError";
+import { Prisma } from "../../generated/prisma/client";
 
 export class PrismaShiftTransferRepository
   implements ShiftTransferRepository
 {
   async save(event: ShiftTransferEvent): Promise<void> {
-    await transactionContext.get().shiftTransferEvent.create({
-      data: {
-        id: event.id,
-        driverId: event.toDriverId as any,
-        transferredFromDriverId: event.fromDriverId as any,
-        workPeriodId: event.workPeriodId as any,
-        reason: event.reason,
-        createdAt: event.createdAt,
-      },
-    });
+    try {
+      await transactionContext.get().shiftTransferEvent.create({
+        data: {
+          id: event.id,
+          driverId: event.toDriverId as any,
+          transferredFromDriverId: event.fromDriverId as any,
+          workPeriodId: event.workPeriodId as any,
+          reason: event.reason,
+          createdAt: event.createdAt,
+        },
+      });
+    } catch (error) {
+      // Translate Prisma infrastructure errors to DomainErrors
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2003') {
+          // Foreign key constraint violation
+          throw new DomainError(
+            'WORK_PERIOD_NOT_FOUND',
+            'Cannot transfer non-existent work period'
+          );
+        }
+        if (error.code === 'P2007') {
+          // Invalid input syntax (e.g., malformed UUID)
+          throw new DomainError(
+            'INVALID_WORK_PERIOD_ID',
+            'Invalid work period identifier format'
+          );
+        }
+      }
+      // Re-throw unexpected errors
+      throw error;
+    }
   }
 
   async findByWorkPeriodId(
