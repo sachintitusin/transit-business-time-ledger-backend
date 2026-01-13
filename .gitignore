@@ -7,8 +7,6 @@ dist/
 # Environment variables
 .env
 
-# Prisma
-prisma/migrations/
 
 # Logs
 npm-debug.log*
@@ -22,3 +20,4 @@ yarn-error.log*
 
 # Coverage / t
 generated/
+dist/
