@@ -1,19 +1,24 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { CorrectWorkService } from "../../../../application/services/work/CorrectWorkService";
-import {
-  asDriverId,
-  asWorkPeriodId,
-} from "../../../../domain/shared/types";
+import { asWorkPeriodId } from "../../../../domain/shared/types";
+import { AuthenticatedRequest } from "../../types/AuthRequest";
+import { DomainError } from "../../../../domain/shared/DomainError";
 
 export class CorrectWorkController {
   constructor(
     private readonly correctWorkService: CorrectWorkService
   ) {}
 
-  async handle(req: Request, res: Response): Promise<void> {
+  async handle(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      // 🔒 Auth invariant: this route is protected
+      if (!req.driverId) {
+        throw new Error(
+          "Invariant violation: authenticated request without driverId"
+        );
+      }
+
       const {
-        driverId,
         workPeriodId,
         correctionId,
         correctedStartTime,
@@ -22,7 +27,7 @@ export class CorrectWorkController {
       } = req.body;
 
       await this.correctWorkService.execute({
-        driverId: asDriverId(driverId),
+        driverId: req.driverId,                 // ✅ identity from JWT
         workPeriodId: asWorkPeriodId(workPeriodId),
         correctionId,
         correctedStartTime: new Date(correctedStartTime),
@@ -32,11 +37,18 @@ export class CorrectWorkController {
       });
 
       res.status(201).json({ status: "corrected" });
-    } catch (err: any) {
-      res.status(400).json({
-        error: err.code ?? "CORRECT_WORK_FAILED",
-        message: err.message,
-      });
+    } catch (error) {
+      if (error instanceof DomainError) {
+        res.status(400).json({
+          error: {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+          },
+        });
+        return;
+      }
+      throw error;
     }
   }
 }

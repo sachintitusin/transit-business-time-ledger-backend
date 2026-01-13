@@ -1,27 +1,42 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { CloseWorkService } from "../../../../application/services/work/CloseWorkService";
-import { asDriverId } from "../../../../domain/shared/types";
+import { AuthenticatedRequest } from "../../types/AuthRequest";
+import { DomainError } from "../../../../domain/shared/DomainError";
 
 export class CloseWorkController {
   constructor(
     private readonly closeWorkService: CloseWorkService
   ) {}
 
-  async handle(req: Request, res: Response): Promise<void> {
+  async handle(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { driverId, endTime } = req.body;
+      // 🔒 Auth invariant: this route is protected
+      if (!req.driverId) {
+        throw new Error(
+          "Invariant violation: authenticated request without driverId"
+        );
+      }
+
+      const { endTime } = req.body;
 
       await this.closeWorkService.execute(
-        asDriverId(driverId),
+        req.driverId,          // ✅ identity from JWT
         new Date(endTime)
       );
 
       res.status(200).json({ status: "closed" });
-    } catch (err: any) {
-      res.status(400).json({
-        error: err.code ?? "CLOSE_WORK_FAILED",
-        message: err.message,
-      });
+    } catch (error) {
+      if (error instanceof DomainError) {
+        res.status(400).json({
+          error: {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+          },
+        });
+        return;
+      }
+      throw error;
     }
   }
 }
