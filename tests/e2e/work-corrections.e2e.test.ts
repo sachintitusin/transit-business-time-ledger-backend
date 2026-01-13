@@ -1,7 +1,8 @@
 import request from "supertest";
 import { describe, it } from "vitest";
 import { app } from "../../src/server";
-import { TEST_DRIVER_ID } from "./setup";
+import { TEST_DRIVER_ID, TEST_AUTH_HEADER } from "./setup";
+
 
 const WORK_IDS = {
   test1: "11111111-1111-1111-1111-111111111111",
@@ -12,6 +13,7 @@ const WORK_IDS = {
   test6: "66666666-6666-6666-6666-666666666666",
   test7: "77777777-7777-7777-7777-777777777777",
 };
+
 
 const CORRECTION_IDS = {
   test1: "aaaaaaaa-1111-1111-1111-111111111111",
@@ -24,11 +26,13 @@ const CORRECTION_IDS = {
   test7: "11111111-7777-7777-7777-777777777777",
 };
 
+
 describe.sequential("E2E: Work corrections", () => {
   
   it("corrects a closed work period successfully", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test1,
@@ -38,6 +42,7 @@ describe.sequential("E2E: Work corrections", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-20T17:00:00Z",
@@ -46,6 +51,7 @@ describe.sequential("E2E: Work corrections", () => {
 
     await request(app)
       .post("/work/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test1,
@@ -57,9 +63,11 @@ describe.sequential("E2E: Work corrections", () => {
       .expect(201);
   });
 
+
   it("rejects correction on an OPEN work period", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test2,
@@ -69,6 +77,7 @@ describe.sequential("E2E: Work corrections", () => {
 
     await request(app)
       .post("/work/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test2,
@@ -80,9 +89,11 @@ describe.sequential("E2E: Work corrections", () => {
       .expect(400);
   });
 
+
   it("allows multiple corrections on the same work period (correction chain)", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test3,
@@ -92,6 +103,7 @@ describe.sequential("E2E: Work corrections", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-22T16:00:00Z",
@@ -101,6 +113,7 @@ describe.sequential("E2E: Work corrections", () => {
     // First correction
     await request(app)
       .post("/work/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test3,
@@ -114,6 +127,7 @@ describe.sequential("E2E: Work corrections", () => {
     // Second correction
     await request(app)
       .post("/work/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test3,
@@ -125,9 +139,11 @@ describe.sequential("E2E: Work corrections", () => {
       .expect(201);
   });
 
+
   it("rejects correction with invalid time range (end before start)", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test4,
@@ -137,6 +153,7 @@ describe.sequential("E2E: Work corrections", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-23T17:00:00Z",
@@ -145,6 +162,7 @@ describe.sequential("E2E: Work corrections", () => {
 
     await request(app)
       .post("/work/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test4,
@@ -156,9 +174,11 @@ describe.sequential("E2E: Work corrections", () => {
       .expect(400);
   });
 
+
   it("rejects correction with same start and end time", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test5,
@@ -168,6 +188,7 @@ describe.sequential("E2E: Work corrections", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-24T17:00:00Z",
@@ -176,6 +197,7 @@ describe.sequential("E2E: Work corrections", () => {
 
     await request(app)
       .post("/work/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test5,
@@ -187,9 +209,11 @@ describe.sequential("E2E: Work corrections", () => {
       .expect(400);
   });
 
+
   it("rejects correction of non-existent work period", async () => {
     await request(app)
       .post("/work/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: "99999999-9999-9999-9999-999999999999",
@@ -201,9 +225,11 @@ describe.sequential("E2E: Work corrections", () => {
       .expect(400);
   });
 
+
   it("preserves original work period data after correction", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test7,
@@ -213,6 +239,7 @@ describe.sequential("E2E: Work corrections", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-26T17:00:00Z",
@@ -221,6 +248,7 @@ describe.sequential("E2E: Work corrections", () => {
 
     await request(app)
       .post("/work/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test7,

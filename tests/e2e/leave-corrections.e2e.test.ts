@@ -1,7 +1,8 @@
 import request from "supertest";
 import { describe, it } from "vitest";
 import { app } from "../../src/server";
-import { TEST_DRIVER_ID } from "./setup";
+import { TEST_DRIVER_ID, TEST_AUTH_HEADER } from "./setup";
+
 
 const LEAVE_IDS = {
   test1: "aaaaaaaa-1111-1111-1111-111111111111",
@@ -12,6 +13,7 @@ const LEAVE_IDS = {
   test6: "ffffffff-6666-6666-6666-666666666666",
 };
 
+
 const CORRECTION_IDS = {
   test1: "11111111-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
   test2a: "22222222-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -21,15 +23,18 @@ const CORRECTION_IDS = {
   test5: "55555555-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 };
 
+
 const WORK_IDS = {
   test3: "33333333-3333-3333-3333-333333333333",
 };
+
 
 describe.sequential("E2E: Leave corrections", () => {
   
   it("corrects a leave successfully when no work conflicts", async () => {
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test1,
@@ -41,6 +46,7 @@ describe.sequential("E2E: Leave corrections", () => {
 
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test1,
@@ -52,9 +58,11 @@ describe.sequential("E2E: Leave corrections", () => {
       .expect(201);
   });
 
+
   it("allows multiple corrections on the same leave (correction chain)", async () => {
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test2,
@@ -67,6 +75,7 @@ describe.sequential("E2E: Leave corrections", () => {
     // First correction
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test2,
@@ -80,6 +89,7 @@ describe.sequential("E2E: Leave corrections", () => {
     // Second correction
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test2,
@@ -91,10 +101,12 @@ describe.sequential("E2E: Leave corrections", () => {
       .expect(201);
   });
 
+
   it("rejects leave correction that would overlap with closed work", async () => {
     // Record leave first
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test3,
@@ -107,6 +119,7 @@ describe.sequential("E2E: Leave corrections", () => {
     // Record and close work
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test3,
@@ -116,6 +129,7 @@ describe.sequential("E2E: Leave corrections", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-22T17:00:00Z",
@@ -125,6 +139,7 @@ describe.sequential("E2E: Leave corrections", () => {
     // Attempt to correct leave to overlap with work
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test3,
@@ -136,9 +151,11 @@ describe.sequential("E2E: Leave corrections", () => {
       .expect(400);
   });
 
+
   it("rejects correction with invalid time range (end before start)", async () => {
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test4,
@@ -150,6 +167,7 @@ describe.sequential("E2E: Leave corrections", () => {
 
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test4,
@@ -161,9 +179,11 @@ describe.sequential("E2E: Leave corrections", () => {
       .expect(400);
   });
 
+
   it("rejects correction with same start and end time", async () => {
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test5,
@@ -175,6 +195,7 @@ describe.sequential("E2E: Leave corrections", () => {
 
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test5,
@@ -186,9 +207,11 @@ describe.sequential("E2E: Leave corrections", () => {
       .expect(400);
   });
 
+
   it("rejects correction of non-existent leave", async () => {
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: "99999999-9999-9999-9999-999999999999",

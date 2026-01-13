@@ -1,7 +1,8 @@
 import request from "supertest";
 import { describe, it, expect } from "vitest";
 import { app } from "../../src/server";
-import { TEST_DRIVER_ID } from "./setup";
+import { TEST_DRIVER_ID, TEST_AUTH_HEADER } from "./setup";  // ← Add TEST_AUTH_HEADER
+
 
 const LEAVE_IDS = {
   test1: "aaaaaaaa-1111-1111-1111-111111111111",
@@ -11,11 +12,13 @@ const LEAVE_IDS = {
   test5: "eeeeeeee-5555-5555-5555-555555555555",
 };
 
+
 const CORRECTION_IDS = {
   test3: "cccccccc-cccc-cccc-cccc-cccccccccccc",
   test4: "dddddddd-dddd-dddd-dddd-dddddddddddd",
   test5: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
 };
+
 
 const WORK_IDS = {
   test2: "22222222-2222-2222-2222-222222222222",
@@ -23,14 +26,16 @@ const WORK_IDS = {
   test5: "55555555-5555-5555-5555-555555555555",
 };
 
+
 describe.sequential("E2E: Leave lifecycle", () => {
 
   it("records a leave when no work exists", async () => {
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
-        leaveId: LEAVE_IDS.test1, // ✅ Unique
+        leaveId: LEAVE_IDS.test1,
         startTime: "2026-01-12T10:00:00Z",
         endTime: "2026-01-12T14:00:00Z",
         reason: "Personal leave",
@@ -38,21 +43,24 @@ describe.sequential("E2E: Leave lifecycle", () => {
       .expect(201);
   });
 
+
   it("rejects leave that overlaps with open work", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
-        workPeriodId: WORK_IDS.test2, // ✅ Unique
+        workPeriodId: WORK_IDS.test2,
         startTime: "2026-01-12T09:00:00Z",
       })
       .expect(201);
 
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
-        leaveId: LEAVE_IDS.test2, // ✅ Unique
+        leaveId: LEAVE_IDS.test2,
         startTime: "2026-01-12T10:00:00Z",
         endTime: "2026-01-12T12:00:00Z",
         reason: "Overlapping leave",
@@ -60,12 +68,14 @@ describe.sequential("E2E: Leave lifecycle", () => {
       .expect(400);
   });
 
+
   it("allows correcting a leave when no work conflicts", async () => {
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
-        leaveId: LEAVE_IDS.test3, // ✅ Unique
+        leaveId: LEAVE_IDS.test3,
         startTime: "2026-01-13T10:00:00Z",
         endTime: "2026-01-13T12:00:00Z",
         reason: "Initial leave",
@@ -74,10 +84,11 @@ describe.sequential("E2E: Leave lifecycle", () => {
 
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test3,
-        correctionId: CORRECTION_IDS.test3, // ✅ Unique
+        correctionId: CORRECTION_IDS.test3,
         correctedStartTime: "2026-01-13T11:00:00Z",
         correctedEndTime: "2026-01-13T13:00:00Z",
         reason: "Adjusted timing",
@@ -85,12 +96,14 @@ describe.sequential("E2E: Leave lifecycle", () => {
       .expect(201);
   });
 
+
   it("rejects leave correction that overlaps with open work", async () => {
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
-        leaveId: LEAVE_IDS.test4, // ✅ Unique
+        leaveId: LEAVE_IDS.test4,
         startTime: "2026-01-14T06:00:00Z",
         endTime: "2026-01-14T07:00:00Z",
       })
@@ -98,19 +111,21 @@ describe.sequential("E2E: Leave lifecycle", () => {
 
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
-        workPeriodId: WORK_IDS.test4, // ✅ Unique
+        workPeriodId: WORK_IDS.test4,
         startTime: "2026-01-14T07:30:00Z",
       })
       .expect(201);
 
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test4,
-        correctionId: CORRECTION_IDS.test4, // ✅ Unique
+        correctionId: CORRECTION_IDS.test4,
         correctedStartTime: "2026-01-14T07:00:00Z",
         correctedEndTime: "2026-01-14T09:00:00Z",
         reason: "Overlaps work",
@@ -118,12 +133,14 @@ describe.sequential("E2E: Leave lifecycle", () => {
       .expect(400);
   });
 
+
   it("does not partially apply a failed leave correction", async () => {
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
-        leaveId: LEAVE_IDS.test5, // ✅ Unique
+        leaveId: LEAVE_IDS.test5,
         startTime: "2026-01-15T06:00:00Z",
         endTime: "2026-01-15T07:00:00Z",
       })
@@ -131,19 +148,21 @@ describe.sequential("E2E: Leave lifecycle", () => {
 
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
-        workPeriodId: WORK_IDS.test5, // ✅ Unique
+        workPeriodId: WORK_IDS.test5,
         startTime: "2026-01-15T07:00:00Z",
       })
       .expect(201);
 
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test5,
-        correctionId: CORRECTION_IDS.test5, // ✅ Unique
+        correctionId: CORRECTION_IDS.test5,
         correctedStartTime: "2026-01-15T06:30:00Z",
         correctedEndTime: "2026-01-15T08:00:00Z",
       })
@@ -151,6 +170,7 @@ describe.sequential("E2E: Leave lifecycle", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)  // ← ADD
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-15T10:00:00Z",

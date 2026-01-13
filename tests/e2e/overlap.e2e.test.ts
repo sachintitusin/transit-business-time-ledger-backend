@@ -1,7 +1,8 @@
 import request from "supertest";
 import { describe, it, expect } from "vitest";
 import { app } from "../../src/server";
-import { TEST_DRIVER_ID } from "./setup";
+import { TEST_DRIVER_ID, TEST_AUTH_HEADER } from "./setup";
+
 
 const WORK_IDS = {
   test1: "11111111-aaaa-bbbb-cccc-111111111111",
@@ -13,6 +14,7 @@ const WORK_IDS = {
   test7: "77777777-aaaa-bbbb-cccc-777777777777",
 };
 
+
 const LEAVE_IDS = {
   test1: "aaaaaaaa-1111-2222-3333-111111111111",
   test2: "bbbbbbbb-1111-2222-3333-222222222222",
@@ -20,8 +22,9 @@ const LEAVE_IDS = {
   test4: "dddddddd-1111-2222-3333-444444444444",
   test5: "eeeeeeee-1111-2222-3333-555555555555",
   test6: "ffffffff-1111-2222-3333-666666666666",
-  test7: "77777777-1111-2222-3333-777777777777", // ✅ Must be 7's, not g's
+  test7: "77777777-1111-2222-3333-777777777777",
 };
+
 
 const CORRECTION_IDS = {
   test4: "44444444-cccc-cccc-cccc-444444444444",
@@ -29,10 +32,12 @@ const CORRECTION_IDS = {
   test7: "77777777-cccc-cccc-cccc-777777777777",
 };
 
+
 describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
   it("prevents recording leave that overlaps an open work period", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test1,
@@ -42,6 +47,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test1,
@@ -52,9 +58,11 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
       .expect(400);
   });
 
+
   it("allows recording leave after the overlapping work is closed", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test2,
@@ -64,6 +72,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-21T11:00:00Z",
@@ -72,19 +81,22 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test2,
-        startTime: "2026-01-21T11:00:01Z", // ✅ Fixed: no overlap
+        startTime: "2026-01-21T11:00:01Z",
         endTime: "2026-01-21T13:00:00Z",
         reason: "Personal leave",
       })
       .expect(201);
   });
 
+
   it("prevents closing work if it overlaps an existing leave", async () => {
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test3,
@@ -96,6 +108,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test3,
@@ -105,6 +118,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-22T11:30:00Z",
@@ -112,9 +126,11 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
       .expect(400);
   });
 
+
   it("prevents work correction that causes overlap with existing leave", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test4,
@@ -124,6 +140,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-23T10:00:00Z",
@@ -132,6 +149,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test4,
@@ -143,6 +161,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/work/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test4,
@@ -154,9 +173,11 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
       .expect(400);
   });
 
+
   it("prevents leave correction that causes overlap with existing work", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test5,
@@ -166,6 +187,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-24T11:00:00Z",
@@ -174,6 +196,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test5,
@@ -185,6 +208,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/leave/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test5,
@@ -196,9 +220,11 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
       .expect(400);
   });
 
+
   it("allows adjacent work and leave with a small gap (no overlap)", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test6,
@@ -208,6 +234,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-25T11:00:00Z",
@@ -216,6 +243,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test6,
@@ -226,9 +254,11 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
       .expect(201);
   });
 
+
   it("allows correction that removes overlap with leave", async () => {
     await request(app)
       .post("/work/start")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test7,
@@ -238,6 +268,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/work/close")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         endTime: "2026-01-26T13:00:00Z",
@@ -246,6 +277,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test7,
@@ -257,6 +289,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/work/correct")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test7,
@@ -269,6 +302,7 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
     await request(app)
       .post("/leave/record")
+      .set(TEST_AUTH_HEADER)
       .send({
         driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test7,
