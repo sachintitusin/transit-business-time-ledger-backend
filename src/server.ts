@@ -79,9 +79,7 @@ app.use(express.json());
 // Dependency Injection (Composition Root)
 // ======================================================================
 
-// --------------------
 // Repositories
-// --------------------
 const workPeriodRepository = new PrismaWorkPeriodRepository();
 const workCorrectionRepository = new PrismaWorkCorrectionRepository();
 const leaveRepository = new PrismaLeaveRepository();
@@ -91,26 +89,19 @@ const shiftTransferRepository = new PrismaShiftTransferRepository();
 const driverRepository = new PrismaDriverRepository();
 const authIdentityRepository = new PrismaAuthIdentityRepository();
 
-// --------------------
-// Transaction Manager
-// --------------------
+// Transaction manager
 const transactionManager = new PrismaTransactionManager();
 
-// --------------------
-// Auth Infrastructure
-// --------------------
+// Auth
 const googleTokenVerifier =
   new GoogleTokenVerifierImpl(process.env.GOOGLE_CLIENT_ID!);
 
 const jwtService =
   new JwtServiceImpl(process.env.JWT_SECRET!);
 
-// Auth middleware instance
 const authMiddleware = requireAuth(jwtService);
 
-// --------------------
-// Command Services
-// --------------------
+// Command services
 const startWorkService =
   new StartWorkService(
     workPeriodRepository,
@@ -150,9 +141,11 @@ const leaveCorrectionService =
     transactionManager
   );
 
+// 🔴 FIX WAS HERE: WorkPeriodRepository was missing
 const recordShiftTransferService =
   new RecordShiftTransferService(
     shiftTransferRepository,
+    workPeriodRepository,
     transactionManager
   );
 
@@ -165,9 +158,7 @@ const authenticateDriverService =
     authIdentityRepository
   );
 
-// --------------------
-// Query Services
-// --------------------
+// Query services
 const getLeaveCountSummaryService =
   new GetLeaveCountSummaryService(
     leaveRepository,
@@ -180,11 +171,7 @@ const getWorkSummaryService =
     workCorrectionRepository
   );
 
-// ======================================================================
 // Controllers
-// ======================================================================
-
-// Work
 const startWorkController =
   new StartWorkController(startWorkService);
 
@@ -194,43 +181,31 @@ const closeWorkController =
 const correctWorkController =
   new CorrectWorkController(correctWorkService);
 
-// Leave
 const recordLeaveController =
   new RecordLeaveController(recordLeaveService);
 
 const leaveCorrectionController =
   new LeaveCorrectionController(leaveCorrectionService);
 
-// Transfer
 const recordShiftTransferController =
   new RecordShiftTransferController(recordShiftTransferService);
 
-// Analytics
 const getLeaveCountSummaryController =
   new GetLeaveCountSummaryController(getLeaveCountSummaryService);
 
 const getWorkSummaryController =
   new GetWorkSummaryController(getWorkSummaryService);
 
-// Auth
 const authenticateDriverController =
   new AuthenticateDriverController(authenticateDriverService);
 
-// ======================================================================
 // Routes
-// ======================================================================
-
-// Public
 app.get("/health", (_, res) => {
   res.json({ status: "ok" });
 });
 
-app.use(
-  "/auth",
-  createAuthRoutes(authenticateDriverController)
-);
+app.use("/auth", createAuthRoutes(authenticateDriverController));
 
-// Protected
 app.use(
   "/work",
   authMiddleware,
@@ -253,9 +228,7 @@ app.use(
 app.use(
   "/transfer",
   authMiddleware,
-  createTransferRoutes(
-    recordShiftTransferController
-  )
+  createTransferRoutes(recordShiftTransferController)
 );
 
 app.use(
@@ -268,25 +241,19 @@ app.use(
 );
 
 app.use((err: any, req: any, res: any, next: any) => {
-  console.error("❌ Unhandled error in controller:");
-  console.error(err);
-  
+  console.error("Unhandled error:", err);
+
   res.status(500).json({
     error: {
       code: "INTERNAL_ERROR",
       message: err.message || "Internal server error",
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    }
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    },
   });
 });
 
-// ======================================================================
-// Server
-// ======================================================================
-
 const PORT = process.env.PORT || 3000;
 
-// Only start server if run directly (not during tests)
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

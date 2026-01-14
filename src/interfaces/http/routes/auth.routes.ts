@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { AuthenticateDriverController } from "../controllers/auth/AuthenticateDriverController";
+import { validateBody } from "../middlewares/validateBody";
+import { AuthenticateRequestSchema } from "../dto/auth/AuthenticateDto";
 
 export function createAuthRoutes(
   authenticateDriverController: AuthenticateDriverController
@@ -8,6 +10,7 @@ export function createAuthRoutes(
 
   router.post(
     "/google",
+    validateBody(AuthenticateRequestSchema),
     (req, res) => authenticateDriverController.handle(req, res)
   );
 
