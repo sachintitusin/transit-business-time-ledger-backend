@@ -2,7 +2,11 @@ import { Response } from "express";
 import { randomUUID } from "crypto";
 
 import { RecordShiftTransferService } from "../../../../application/services/transfer/RecordShiftTransferService";
-import { asDriverId, asWorkPeriodId } from "../../../../domain/shared/types";
+import {
+  asDriverId,
+  asWorkPeriodId,
+  asShiftTransferId,
+} from "../../../../domain/shared/types";
 import { AuthenticatedRequest } from "../../types/AuthRequest";
 import { DomainError } from "../../../../domain/shared/DomainError";
 
@@ -13,26 +17,28 @@ export class RecordShiftTransferController {
 
   async handle(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      // 🔒 This route is protected — driverId MUST exist
       if (!req.driverId) {
         throw new Error(
           "Invariant violation: authenticated request without driverId"
         );
       }
 
-      const { workPeriodId, toDriverId, reason } = req.body;
+      const { fromDriverId, toDriverId, workPeriodId, reason } = req.body;
+
+      const transferId = asShiftTransferId(randomUUID());
 
       await this.recordShiftTransferService.execute({
-        transferId: randomUUID(),
+        transferId,
         workPeriodId: asWorkPeriodId(workPeriodId),
+        fromDriverId: asDriverId(fromDriverId),
         toDriverId: asDriverId(toDriverId),
-        fromDriverId: req.driverId,
         createdAt: new Date(),
         reason,
       });
 
-      res.status(201).json({ status: "transfer_recorded" });
+      res.status(201).json({ transferId });
     } catch (error) {
+
       if (error instanceof DomainError) {
         res.status(400).json({
           error: {
@@ -43,6 +49,7 @@ export class RecordShiftTransferController {
         });
         return;
       }
+
       throw error;
     }
   }

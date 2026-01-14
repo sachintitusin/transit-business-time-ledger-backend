@@ -27,7 +27,7 @@ export class CorrectWorkController {
       } = req.body;
 
       await this.correctWorkService.execute({
-        driverId: req.driverId,                 // ✅ identity from JWT
+        driverId: req.driverId,                 
         workPeriodId: asWorkPeriodId(workPeriodId),
         correctionId,
         correctedStartTime: new Date(correctedStartTime),

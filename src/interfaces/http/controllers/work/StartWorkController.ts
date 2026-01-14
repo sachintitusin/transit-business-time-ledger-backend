@@ -18,16 +18,16 @@ export class StartWorkController {
         );
       }
 
-      const { workPeriodId, startTime } = req.body;
+      const { startTime } = req.body;
 
-      await this.startWorkService.execute(
-        req.driverId,                     // ✅ identity from JWT
-        asWorkPeriodId(workPeriodId),
+      const workPeriodId = await this.startWorkService.execute(
+        req.driverId,
         new Date(startTime),
         new Date()
       );
 
-      res.status(201).json({ status: "started" });
+      res.status(201).json({ workPeriodId });
+
     } catch (error) {
       // Handle domain errors with 400 Bad Request
       if (error instanceof DomainError) {
