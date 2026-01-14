@@ -7,6 +7,7 @@ import {
   WorkPeriodStatus as DomainWorkPeriodStatus,
 } from "../../domain/work/WorkPeriodStatus";
 import { DriverId, WorkPeriodId } from "../../domain/shared/types";
+import { TimeRange } from "../../domain/shared/TimeRange";
 
 export class PrismaWorkPeriodRepository implements WorkPeriodRepository {
 
@@ -32,8 +33,83 @@ export class PrismaWorkPeriodRepository implements WorkPeriodRepository {
     return this.reconstitute(row);
   }
 
+    /**
+   * I26 — No overlapping effective work periods
+   * Returns CLOSED work periods whose *effective* time overlaps the given range.
+   */
+  async findEffectiveOverlapping(
+    driverId: DriverId,
+    range: TimeRange,
+    excludeWorkId?: WorkPeriodId
+  ): Promise<WorkPeriod[]> {
+    const prisma = transactionContext.get();
+
+    // ------------------------------------------------------------
+    // 1️⃣ SQL-level prefilter (declared time only, indexed & fast)
+    // ------------------------------------------------------------
+    const candidates = await prisma.workPeriod.findMany({
+      where: {
+        driverId: (driverId as any).value ?? driverId, // ✅ primitive extraction
+        status: "CLOSED",
+        id: excludeWorkId
+          ? { not: (excludeWorkId as any).value ?? excludeWorkId }
+          : undefined,
+
+        // existing_start < candidate_end
+        declaredStartTime: { lt: range.end },
+
+        // existing_end > candidate_start
+        declaredEndTime: { gt: range.start },
+      },
+      include: {
+        corrections: {
+          orderBy: { createdAt: "desc" },
+          take: 1, // ✅ latest correction only (atomic pair)
+        },
+      },
+      take: 100, // safety valve
+    });
+
+    // Optional micro-optimization
+    if (candidates.length === 0) return [];
+
+    // ------------------------------------------------------------
+    // 2️⃣ Effective-time overlap check (authoritative)
+    // ------------------------------------------------------------
+    return candidates
+      .filter((row) => {
+        // Defensive infra guard — CLOSED invariant breach
+        if (!row.declaredStartTime || !row.declaredEndTime) return false;
+
+        const correction = row.corrections[0];
+
+        const effectiveStart =
+          correction?.correctedStartTime ?? row.declaredStartTime;
+
+        const effectiveEnd =
+          correction?.correctedEndTime ?? row.declaredEndTime;
+
+        // Defensive: corrupted effective range (fail-soft in infra)
+        if (effectiveStart >= effectiveEnd) return false;
+
+        return range.overlaps(
+          TimeRange.create(effectiveStart, effectiveEnd)
+        );
+      })
+      .map((row) =>
+        this.reconstitute({
+          id: row.id,
+          driverId: row.driverId,
+          declaredStartTime: row.declaredStartTime,
+          declaredEndTime: row.declaredEndTime,
+          status: row.status,
+          createdAt: row.createdAt,
+        })
+      );
+  }
+
   /**
-   * ✅ NEW — required for LeaveCorrection overlap checks
+   * NEW — required for LeaveCorrection overlap checks
    * Returns ALL work periods (OPEN + CLOSED) for a driver
    */
   async findByDriver(driverId: DriverId): Promise<WorkPeriod[]> {
