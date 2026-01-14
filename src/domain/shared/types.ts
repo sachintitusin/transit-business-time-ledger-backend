@@ -15,3 +15,6 @@ export type PlannedShiftId = Brand<string, 'PlannedShiftId'>
 export const asDriverId = (id: string) => id as DriverId
 export const asWorkPeriodId = (id: string) => id as WorkPeriodId
 export const asLeaveId = (id: string) => id as LeaveId
+export const asShiftTransferId = (id: string) => id as ShiftTransferId;
+export const asLeaveCorrectionId = (id: string) => id as LeaveCorrectionId
+export const asWorkCorrectionId = (id: string) => id as WorkCorrectionId

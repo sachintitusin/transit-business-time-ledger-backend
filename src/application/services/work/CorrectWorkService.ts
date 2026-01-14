@@ -9,11 +9,13 @@ import { EffectiveWorkTime } from '../../../domain/work/EffectiveWorkTime'
 import { EffectiveLeaveTime } from '../../../domain/leave/EffectiveLeaveTime'
 import { WorkLeaveOverlapPolicy } from '../../policies/WorkLeaveOverlapPolicy'
 import { DomainError } from '../../../domain/shared/DomainError'
+import { TimeRange } from '../../../domain/shared/TimeRange' 
 import {
   DriverId,
   WorkCorrectionId,
   WorkPeriodId,
 } from '../../../domain/shared/types'
+import { MaxShiftDurationPolicy } from '../../policies/MaxShiftDurationPolicy'
 
 export class CorrectWorkService {
   constructor(
@@ -21,7 +23,8 @@ export class CorrectWorkService {
     private readonly workCorrectionRepository: WorkCorrectionRepository,
     private readonly leaveRepository: LeaveRepository,
     private readonly leaveCorrectionRepository: LeaveCorrectionRepository,
-    private readonly transactionManager: TransactionManager
+    private readonly transactionManager: TransactionManager,
+    private readonly maxShiftPolicy: MaxShiftDurationPolicy = new MaxShiftDurationPolicy()
   ) {}
 
   async execute(command: {
@@ -44,14 +47,21 @@ export class CorrectWorkService {
         reason,
       } = command
 
-      // 1. Load work period
-      const workPeriod =
-        await this.workPeriodRepository.findById(workPeriodId)
 
+      // 1. Load work period
+      const workPeriod = await this.workPeriodRepository.findById(workPeriodId)
       if (!workPeriod || workPeriod.driverId !== driverId) {
         throw new DomainError(
           'WORK_PERIOD_NOT_FOUND',
           'Work period not found for driver'
+        )
+      }
+
+      // ✅ NEW I26: CLOSED invariant (explicit)
+      if (!workPeriod.isClosed()) {
+        throw new DomainError(
+          'WORK_NOT_CLOSED',
+          'Work period must be closed before correction'
         )
       }
 
@@ -67,23 +77,48 @@ export class CorrectWorkService {
 
       // 3. Load existing corrections
       const existingCorrections =
-        await this.workCorrectionRepository.findByWorkPeriodId(
-          workPeriod.id
-        )
-
+        await this.workCorrectionRepository.findByWorkPeriodId(workPeriod.id)
       const allCorrections = [...existingCorrections, correction]
 
-      // 4. Compute effective work
-      const effectiveWork =
-        EffectiveWorkTime.from(workPeriod, allCorrections)
+      // ✅ NEW I26: Build corrected range
+      const correctedRange = TimeRange.create(
+        correction.correctedStartTime,
+        correction.correctedEndTime
+      )
 
-      // 5. Load leave data
+      // ------------------------------------------------------------  
+      // ✅ NEW I26: Intrinsic → External validation ordering
+      // ------------------------------------------------------------
+
+      // A. Max duration (intrinsic)
+      this.maxShiftPolicy.validate(correctedRange)
+
+      // B. Work-work overlap (external conflict) 
+      const overlappingWorks = await this.workPeriodRepository.findEffectiveOverlapping(
+        driverId,
+        correctedRange,
+        workPeriod.id  // Exclude self
+      )
+
+      if (overlappingWorks.length > 0) {
+        throw new DomainError(
+          'WORK_OVERLAPS_EXISTING_WORK',
+          `Correction overlaps ${overlappingWorks.length} prior period(s)`,
+          {
+            overlappingWorkIds: overlappingWorks.map(w => w.id),
+            correctedStart: correctedRange.start,
+            correctedEnd: correctedRange.end,
+          }
+        )
+      }
+
+      // 4. Compute effective work (now guaranteed valid)
+      const effectiveWork = EffectiveWorkTime.from(workPeriod, allCorrections)
+
+      // 5. Load leave data (existing I16)
       const leaves = await this.leaveRepository.findByDriver(driverId)
       const leaveIds = leaves.map(l => l.id)
-
-      const leaveCorrections =
-        await this.leaveCorrectionRepository.findByLeaveIds(leaveIds)
-
+      const leaveCorrections = await this.leaveCorrectionRepository.findByLeaveIds(leaveIds)
       const effectiveLeaves = leaves.map(leave =>
         EffectiveLeaveTime.from(
           leave,
@@ -91,13 +126,10 @@ export class CorrectWorkService {
         )
       )
 
-      // 6. Apply cross-domain policy
-      WorkLeaveOverlapPolicy.assertNoOverlap(
-        effectiveWork,
-        effectiveLeaves
-      )
+      // 6. Apply cross-domain policy (existing I16)
+      WorkLeaveOverlapPolicy.assertNoOverlap(effectiveWork, effectiveLeaves)
 
-      // 7. Persist correction (atomic)
+      // 7. Persist correction (existing)
       await this.workCorrectionRepository.save(correction)
     })
   }

@@ -9,13 +9,15 @@ import { NoActiveWorkPeriod } from '../../../domain/work/WorkPeriodErrors'
 import { DriverId } from '../../../domain/shared/types'
 import { DomainError } from '../../../domain/shared/DomainError'
 import { TimeRange } from '../../../domain/shared/TimeRange'
+import { MaxShiftDurationPolicy } from '../../policies/MaxShiftDurationPolicy'
 
 export class CloseWorkService {
   constructor(
     private readonly workPeriodRepository: WorkPeriodRepository,
     private readonly leaveRepository: LeaveRepository,
     private readonly leaveCorrectionRepository: LeaveCorrectionRepository,
-    private readonly transactionManager: TransactionManager
+    private readonly transactionManager: TransactionManager,
+    private readonly maxShiftPolicy: MaxShiftDurationPolicy = new MaxShiftDurationPolicy()
   ) {}
 
   async execute(
@@ -37,7 +39,10 @@ export class CloseWorkService {
         endTime
       )
 
-      // 3. Load leave data
+      // limiting work range
+      this.maxShiftPolicy.validate(candidateWorkRange)
+
+      // Load leave data
       const leaves =
         await this.leaveRepository.findByDriver(driverId)
 
@@ -68,6 +73,24 @@ export class CloseWorkService {
             }
           )
         }
+      }
+      //overlapping works test
+      const overlappingWorks = await this.workPeriodRepository.findEffectiveOverlapping(
+        driverId,
+        candidateWorkRange,
+        workPeriod.id  // exclude self
+      )
+
+      if (overlappingWorks.length > 0) {
+        throw new DomainError(
+          'WORK_OVERLAPS_WORK',
+          'Cannot close work period: overlaps with existing effective work time',
+          {
+            workStart: candidateWorkRange.start,
+            workEnd: candidateWorkRange.end,
+            overlappingWorkIds: overlappingWorks.map(w => w.id),
+          }
+        )
       }
 
       // 6. Now safe to close

@@ -71,6 +71,7 @@ export class AuthenticateDriverService {
 
       // 6. Issue JWT
       const token = this.jwtService.sign({
+        driverId,
         sub: driverId,
         email: profile.email,
       });

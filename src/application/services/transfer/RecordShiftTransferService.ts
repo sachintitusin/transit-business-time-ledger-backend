@@ -1,18 +1,20 @@
 import { ShiftTransferRepository } from '../../ports/ShiftTransferRepository'
+import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository'
 import { TransactionManager } from '../../ports/TransactionManager'
 
 import { ShiftTransferEvent } from '../../../domain/transfer/ShiftTransferEvent'
-import { DriverId, WorkPeriodId } from '../../../domain/shared/types'
+import { DriverId, ShiftTransferId, WorkPeriodId } from '../../../domain/shared/types'
 import { DomainError } from '../../../domain/shared/DomainError'
 
 export class RecordShiftTransferService {
   constructor(
     private readonly shiftTransferRepo: ShiftTransferRepository,
+    private readonly workPeriodRepo: WorkPeriodRepository,
     private readonly transactionManager: TransactionManager
   ) {}
 
   async execute(command: {
-    transferId: string
+    transferId: ShiftTransferId
     workPeriodId: WorkPeriodId
     toDriverId: DriverId
     fromDriverId: DriverId
@@ -29,7 +31,15 @@ export class RecordShiftTransferService {
         reason,
       } = command
 
-      // Invariant: cannot transfer to self
+      const workPeriod = await this.workPeriodRepo.findById(workPeriodId)
+
+      if (!workPeriod) {
+        throw new DomainError(
+          'WORK_PERIOD_NOT_FOUND',
+          'Cannot transfer non-existent work period'
+        )
+      }
+
       if (fromDriverId === toDriverId) {
         throw new DomainError(
           'INVALID_SHIFT_TRANSFER',
@@ -37,7 +47,6 @@ export class RecordShiftTransferService {
         )
       }
 
-      // Create domain event
       const event = ShiftTransferEvent.create(
         transferId,
         workPeriodId,
@@ -47,7 +56,6 @@ export class RecordShiftTransferService {
         reason
       )
 
-      // Persist atomically
       await this.shiftTransferRepo.save(event)
     })
   }
