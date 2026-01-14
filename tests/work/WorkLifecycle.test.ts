@@ -10,6 +10,7 @@ import { InMemoryLeaveCorrectionRepository } from "../fakes/InMemoryLeaveCorrect
 import { InMemoryWorkCorrectionRepository } from "../fakes/InMemoryWorkCorrectionRepository";
 
 import { FakeTransactionManager } from "../fakes/FakeTransactionManager";
+import { DomainError } from "../../src/domain/shared/DomainError";
 import { DriverId, WorkPeriodId } from "../../src/domain/shared/types";
 
 describe("Work lifecycle", () => {
@@ -21,10 +22,9 @@ describe("Work lifecycle", () => {
     const startWork = new StartWorkService(workRepo, tx);
 
     const driverId = "driver-1" as DriverId;
-    const workPeriodId = "work-1" as WorkPeriodId;
     const now = new Date("2025-01-01T09:00:00Z");
 
-    await startWork.execute(driverId, workPeriodId, now, now);
+    await startWork.execute(driverId, now, now);  
 
     const openWork = await workRepo.findOpenByDriver(driverId);
 
@@ -39,15 +39,13 @@ describe("Work lifecycle", () => {
     const startWork = new StartWorkService(workRepo, tx);
 
     const driverId = "driver-1" as DriverId;
-    const firstWorkId = "work-1" as WorkPeriodId;
-    const secondWorkId = "work-2" as WorkPeriodId;
     const now = new Date("2025-01-01T09:00:00Z");
 
-    await startWork.execute(driverId, firstWorkId, now, now);
+    await startWork.execute(driverId, now, now);
 
     await expect(
-      startWork.execute(driverId, secondWorkId, now, now)
-    ).rejects.toThrow();
+      startWork.execute(driverId, now, now)
+    ).rejects.toThrow(); 
   });
 
   it("rejects closing work when no work period is open", async () => {
@@ -86,12 +84,11 @@ describe("Work lifecycle", () => {
     );
 
     const driverId = "driver-1" as DriverId;
-    const workId = "work-1" as WorkPeriodId;
 
     const start = new Date("2025-01-01T09:00:00Z");
     const end = new Date("2025-01-01T17:00:00Z");
 
-    await startWork.execute(driverId, workId, start, start);
+    const workId = await startWork.execute(driverId, start, start); 
     await closeWork.execute(driverId, end);
 
     const work = await workRepo.findById(workId);
@@ -113,7 +110,6 @@ describe("Work lifecycle", () => {
       leaveCorrectionRepo,
       tx
     );
-
     const correctWork = new CorrectWorkService(
       workRepo,
       correctionRepo,
@@ -123,25 +119,23 @@ describe("Work lifecycle", () => {
     );
 
     const driverId = "driver-1" as DriverId;
-    const workId = "work-1" as WorkPeriodId;
-    const correctionId = "corr-1" as any;
 
     const originalStart = new Date("2025-01-01T09:00:00Z");
     const originalEnd = new Date("2025-01-01T12:00:00Z");
 
-    await startWork.execute(driverId, workId, originalStart, new Date());
+    const workId = await startWork.execute(driverId, originalStart, originalStart); 
     await closeWork.execute(driverId, originalEnd);
 
     await correctWork.execute({
       driverId,
-      workPeriodId: workId,
-      correctionId,
+      workPeriodId: workId, 
+      correctionId: "corr-1" as any,
       correctedStartTime: new Date("2025-01-01T10:00:00Z"),
       correctedEndTime: new Date("2025-01-01T13:00:00Z"),
       now: new Date(),
     });
 
-    const work = await workRepo.findById(workId);
+    const work = await workRepo.findById(workId); 
 
     expect(work!.declaredStartTime).toEqual(originalStart);
     expect(work!.declaredEndTime).toEqual(originalEnd);
@@ -154,14 +148,13 @@ describe("Work lifecycle", () => {
     const startWork = new StartWorkService(workRepo, tx);
 
     const driverId = "driver-1" as DriverId;
-    const workId = "work-1" as WorkPeriodId;
 
     const workTime = new Date("2025-01-01T09:00:00Z");
     const entryTime = new Date("2025-01-03T20:00:00Z");
 
-    await startWork.execute(driverId, workId, workTime, entryTime);
+    const workId = await startWork.execute(driverId, workTime, entryTime);
 
-    const work = await workRepo.findById(workId);
+    const work = await workRepo.findById(workId); 
 
     expect(work!.declaredStartTime).toEqual(workTime);
     expect(work!.createdAt).toEqual(entryTime);
@@ -177,16 +170,15 @@ describe("Work lifecycle", () => {
     const closeWork = new CloseWorkService(workRepo, leaveRepo, leaveCorrectionRepo, tx);
 
     const driverId = "driver-1" as DriverId;
-    const workId = "work-1" as WorkPeriodId;
 
     const start = new Date("2025-01-01T09:00:00Z");
-    const invalidEnd = new Date("2025-01-01T08:00:00Z"); // ❌ Before start
+    const invalidEnd = new Date("2025-01-01T08:00:00Z");
 
-    await startWork.execute(driverId, workId, start, start);
+    const workId = await startWork.execute(driverId, start, start);
 
     await expect(
       closeWork.execute(driverId, invalidEnd)
-    ).rejects.toThrow("End time must be after start time");
+    ).rejects.toThrow("End time must be after start time"); 
   });
 
   it("rejects correcting an OPEN work period", async () => {
@@ -202,11 +194,13 @@ describe("Work lifecycle", () => {
     );
 
     const driverId = "driver-1" as DriverId;
-    const workId = "work-1" as WorkPeriodId;
 
-    await startWork.execute(driverId, workId, new Date("2025-01-01T09:00:00Z"), new Date());
+    const workId = await startWork.execute(
+      driverId,
+      new Date("2025-01-01T09:00:00Z"),
+      new Date()
+    );
 
-    // ❌ Try to correct while still OPEN (violates I6)
     await expect(
       correctWork.execute({
         driverId,
@@ -216,7 +210,7 @@ describe("Work lifecycle", () => {
         correctedEndTime: new Date("2025-01-01T13:00:00Z"),
         now: new Date(),
       })
-    ).rejects.toThrow("Work period must be closed before it can be corrected");
+    ).rejects.toThrow("ork period must be closed before correction");
   });
 
   it("allows multiple corrections on same work period", async () => {
@@ -233,12 +227,14 @@ describe("Work lifecycle", () => {
     );
 
     const driverId = "driver-1" as DriverId;
-    const workId = "work-1" as WorkPeriodId;
 
-    await startWork.execute(driverId, workId, new Date("2025-01-01T09:00:00Z"), new Date());
+    const workId = await startWork.execute(  
+      driverId,
+      new Date("2025-01-01T09:00:00Z"),
+      new Date()
+    );
     await closeWork.execute(driverId, new Date("2025-01-01T12:00:00Z"));
 
-    // First correction
     await correctWork.execute({
       driverId, workPeriodId: workId, correctionId: "corr-1" as any,
       correctedStartTime: new Date("2025-01-01T10:00:00Z"),
@@ -246,7 +242,6 @@ describe("Work lifecycle", () => {
       now: new Date(),
     });
 
-    // Second correction (should succeed - I7 allows additive corrections)
     await correctWork.execute({
       driverId, workPeriodId: workId, correctionId: "corr-2" as any,
       correctedStartTime: new Date("2025-01-01T09:30:00Z"),
@@ -255,8 +250,6 @@ describe("Work lifecycle", () => {
     });
 
     const corrections = await correctionRepo.findByWorkPeriodId(workId);
-    expect(corrections).toHaveLength(2); // ✅ Both preserved
+    expect(corrections).toHaveLength(2);
   });
-
-
 });

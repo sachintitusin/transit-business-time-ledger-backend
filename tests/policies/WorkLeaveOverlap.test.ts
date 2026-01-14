@@ -36,7 +36,6 @@ describe('Work–Leave overlap policy', () => {
     )
 
     const driverId = 'driver-1' as DriverId
-    const workId = 'work-1' as WorkPeriodId
     const leaveId = 'leave-1' as LeaveId
 
     await recordLeave.execute({
@@ -49,7 +48,6 @@ describe('Work–Leave overlap policy', () => {
 
     await startWork.execute(
       driverId,
-      workId,
       new Date('2025-01-01T09:00:00Z'),
       new Date()
     )
@@ -94,7 +92,6 @@ describe('Work–Leave overlap policy', () => {
 
     await startWork.execute(
       driverId,
-      workId,
       new Date('2025-01-01T09:00:00Z'),
       new Date()
     )
@@ -156,7 +153,6 @@ describe('Work–Leave overlap policy', () => {
 
     await startWork.execute(
       driverId,
-      workId,
       new Date('2025-01-01T09:00:00Z'),
       new Date()
     )

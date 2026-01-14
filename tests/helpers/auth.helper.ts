@@ -9,14 +9,14 @@ const jwtService = new JwtServiceImpl(
 export function createAuthToken(driverId: string): string {
   return jwtService.sign({
     sub: driverId,
-    driverId: driverId,
+    driverId,
     email: `${driverId}@test.com`,
   });
 }
 
-// ✅ Use valid UUID format (fixed for reproducibility)
-export const TEST_DRIVER_1 = '11111111-1111-1111-1111-111111111111';
-export const TEST_DRIVER_2 = '22222222-2222-2222-2222-222222222222';
+// Valid UUID v4 values
+export const TEST_DRIVER_1 = '550e8400-e29b-41d4-a716-446655440000';
+export const TEST_DRIVER_2 = '6a1c0f9d-3c7e-4c0f-9b52-1d9e6f5b1a23';
 
 export const TOKEN_DRIVER_1 = createAuthToken(TEST_DRIVER_1);
 export const TOKEN_DRIVER_2 = createAuthToken(TEST_DRIVER_2);

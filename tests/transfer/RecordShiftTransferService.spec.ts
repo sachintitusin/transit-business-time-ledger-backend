@@ -1,29 +1,41 @@
 import { describe, it, expect } from 'vitest'
-
 import { RecordShiftTransferService } from '../../src/application/services/transfer/RecordShiftTransferService'
 import { InMemoryShiftTransferRepository } from '../fakes/InMemoryShiftTransferRepository'
+import { InMemoryWorkPeriodRepository } from '../fakes/InMemoryWorkPeriodRepository'
 import { DomainError } from '../../src/domain/shared/DomainError'
-import { DriverId, WorkPeriodId } from '../../src/domain/shared/types'
+import { DriverId, WorkPeriodId, ShiftTransferId } from '../../src/domain/shared/types'
+import { asDriverId, asWorkPeriodId, asShiftTransferId } from '../../src/domain/shared/types'  // ✅ Factories
 import { FakeTransactionManager } from '../fakes/FakeTransactionManager'
+import { WorkPeriod } from '../../src/domain/work/WorkPeriod'
 
 describe('RecordShiftTransferService', () => {
   const now = new Date('2026-01-15T12:00:00Z')
 
   it('records a shift transfer successfully', async () => {
-    const repo = new InMemoryShiftTransferRepository()
-    const service = new RecordShiftTransferService(repo, new FakeTransactionManager())
+    const shiftRepo = new InMemoryShiftTransferRepository()
+    const workRepo = new InMemoryWorkPeriodRepository()
+    const service = new RecordShiftTransferService(shiftRepo, workRepo, new FakeTransactionManager())
+
+    const wpId = asWorkPeriodId('wp-1')           // ✅ Factory
+    const driver1 = asDriverId('driver-1')        // ✅ Factory
+    const driver2 = asDriverId('driver-2')        // ✅ Factory
+    const transferId = asShiftTransferId('transfer-1')  // ✅ Factory
+
+    // Seed work period
+    const wp = WorkPeriod.start(wpId, driver1, new Date('2026-01-15T08:00:00Z'), now)
+    wp.close(new Date('2026-01-15T10:00:00Z'))
+    await workRepo.save(wp)
 
     await service.execute({
-      transferId: 'transfer-1',
-      workPeriodId: 'wp-1' as WorkPeriodId,
-      toDriverId: 'driver-2' as DriverId,
-      fromDriverId: 'driver-1' as DriverId,
+      transferId,
+      workPeriodId: wpId,
+      toDriverId: driver2,
+      fromDriverId: driver1,
       createdAt: now,
       reason: 'Swap requested',
-    });
+    })
 
-    const events = await repo.findByWorkPeriodId('wp-1' as WorkPeriodId)
-
+    const events = await shiftRepo.findByWorkPeriodId(wpId)
     expect(events.length).toBe(1)
     expect(events[0].toDriverId).toBe('driver-2')
     expect(events[0].fromDriverId).toBe('driver-1')
@@ -31,57 +43,84 @@ describe('RecordShiftTransferService', () => {
   })
 
   it('throws when transferring to the same driver', async () => {
-    const repo = new InMemoryShiftTransferRepository()
-    const service = new RecordShiftTransferService(repo, new FakeTransactionManager())
+    const shiftRepo = new InMemoryShiftTransferRepository()
+    const workRepo = new InMemoryWorkPeriodRepository()
+    const service = new RecordShiftTransferService(shiftRepo, workRepo, new FakeTransactionManager())
+
+    const wpId = asWorkPeriodId('wp-2')
+    const driverId = asDriverId('driver-1')
+    const transferId = asShiftTransferId('transfer-2')
+
+    const wp = WorkPeriod.start(wpId, driverId, new Date('2026-01-15T08:00:00Z'), now)
+    wp.close(new Date('2026-01-15T10:00:00Z'))
+    await workRepo.save(wp)
 
     await expect(
       service.execute({
-        transferId: 'transfer-2',
-        workPeriodId: 'wp-2' as WorkPeriodId,
-        toDriverId: 'driver-1' as DriverId,
-        fromDriverId: 'driver-1' as DriverId,
+        transferId,
+        workPeriodId: wpId,
+        toDriverId: driverId,
+        fromDriverId: driverId,
         createdAt: now,
       })
-    ).rejects.toBeInstanceOf(DomainError);
+    ).rejects.toBeInstanceOf(DomainError)
   })
 
   it('appends multiple transfer events', async () => {
-    const repo = new InMemoryShiftTransferRepository()
-    const service = new RecordShiftTransferService(repo, new FakeTransactionManager())
+    const shiftRepo = new InMemoryShiftTransferRepository()
+    const workRepo = new InMemoryWorkPeriodRepository()
+    const service = new RecordShiftTransferService(shiftRepo, workRepo, new FakeTransactionManager())
+
+    const wpId = asWorkPeriodId('wp-3')
+    const driver1 = asDriverId('driver-1')
+    const driver2 = asDriverId('driver-2')
+    const driver3 = asDriverId('driver-3')
+
+    const wp = WorkPeriod.start(wpId, driver1, new Date('2026-01-15T08:00:00Z'), now)
+    wp.close(new Date('2026-01-15T10:00:00Z'))
+    await workRepo.save(wp)
 
     await service.execute({
-      transferId: 'transfer-3',
-      workPeriodId: 'wp-3' as WorkPeriodId,
-      toDriverId: 'driver-2' as DriverId,
-      fromDriverId: 'driver-1' as DriverId,
+      transferId: asShiftTransferId('transfer-3'),
+      workPeriodId: wpId,
+      toDriverId: driver2,
+      fromDriverId: driver1,
       createdAt: now,
-    });
+    })
 
     await service.execute({
-      transferId: 'transfer-4',
-      workPeriodId: 'wp-3' as WorkPeriodId,
-      toDriverId: 'driver-3' as DriverId,
-      fromDriverId: 'driver-2' as DriverId,
+      transferId: asShiftTransferId('transfer-4'),
+      workPeriodId: wpId,
+      toDriverId: driver3,
+      fromDriverId: driver2,
       createdAt: now,
-    });
+    })
 
-    const events = await repo.findByWorkPeriodId('wp-3' as WorkPeriodId)
-
+    const events = await shiftRepo.findByWorkPeriodId(wpId)
     expect(events.length).toBe(2)
   })
 
   it('throws when origin driver is missing', async () => {
-    const repo = new InMemoryShiftTransferRepository()
-    const service = new RecordShiftTransferService(repo, new FakeTransactionManager())
+    const shiftRepo = new InMemoryShiftTransferRepository()
+    const workRepo = new InMemoryWorkPeriodRepository()
+    const service = new RecordShiftTransferService(shiftRepo, workRepo, new FakeTransactionManager())
+
+    const wpId = asWorkPeriodId('wp-5')
+    const driverId = asDriverId('driver-2')
+    const transferId = asShiftTransferId('transfer-5')
+
+    const wp = WorkPeriod.start(wpId, driverId, new Date('2026-01-15T08:00:00Z'), now)
+    wp.close(new Date('2026-01-15T10:00:00Z'))
+    await workRepo.save(wp)
 
     await expect(
       service.execute({
-        transferId: 'transfer-5',
-        workPeriodId: 'wp-5' as WorkPeriodId,
-        toDriverId: 'driver-2' as DriverId,
-        fromDriverId: null as any, // ❌ Required
+        transferId,
+        workPeriodId: wpId,
+        toDriverId: driverId,
+        fromDriverId: null as any,
         createdAt: now,
       })
-    ).rejects.toThrow('Origin driver must be specified');
+    ).rejects.toThrow('Origin driver must be specified')
   })
 })

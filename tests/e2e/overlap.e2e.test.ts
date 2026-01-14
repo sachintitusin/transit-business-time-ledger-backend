@@ -2,35 +2,19 @@ import request from "supertest";
 import { describe, it, expect } from "vitest";
 import { app } from "../../src/server";
 import { TEST_DRIVER_ID, TEST_AUTH_HEADER } from "./setup";
+import { makeIds } from "../helpers/ids";
 
+const WORK_IDS = makeIds([
+  "test1", "test2", "test3", "test4", "test5", "test6", "test7"
+] as const);
 
-const WORK_IDS = {
-  test1: "11111111-aaaa-bbbb-cccc-111111111111",
-  test2: "22222222-aaaa-bbbb-cccc-222222222222",
-  test3: "33333333-aaaa-bbbb-cccc-333333333333",
-  test4: "44444444-aaaa-bbbb-cccc-444444444444",
-  test5: "55555555-aaaa-bbbb-cccc-555555555555",
-  test6: "66666666-aaaa-bbbb-cccc-666666666666",
-  test7: "77777777-aaaa-bbbb-cccc-777777777777",
-};
+const LEAVE_IDS = makeIds([
+  "test1", "test2", "test3", "test4", "test5", "test6", "test7"
+] as const);
 
-
-const LEAVE_IDS = {
-  test1: "aaaaaaaa-1111-2222-3333-111111111111",
-  test2: "bbbbbbbb-1111-2222-3333-222222222222",
-  test3: "cccccccc-1111-2222-3333-333333333333",
-  test4: "dddddddd-1111-2222-3333-444444444444",
-  test5: "eeeeeeee-1111-2222-3333-555555555555",
-  test6: "ffffffff-1111-2222-3333-666666666666",
-  test7: "77777777-1111-2222-3333-777777777777",
-};
-
-
-const CORRECTION_IDS = {
-  test4: "44444444-cccc-cccc-cccc-444444444444",
-  test5: "55555555-cccc-cccc-cccc-555555555555",
-  test7: "77777777-cccc-cccc-cccc-777777777777",
-};
+const CORRECTION_IDS = makeIds([
+  "test4", "test5", "test7"
+] as const);
 
 
 describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
@@ -256,21 +240,22 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
 
 
   it("allows correction that removes overlap with leave", async () => {
-    await request(app)
+
+    const res = await request(app)
       .post("/work/start")
       .set(TEST_AUTH_HEADER)
       .send({
-        driverId: TEST_DRIVER_ID,
         workPeriodId: WORK_IDS.test7,
         startTime: "2026-01-26T09:00:00Z",
       })
       .expect(201);
+    const wpId = (res.body.workPeriodId)
 
     await request(app)
       .post("/work/close")
       .set(TEST_AUTH_HEADER)
       .send({
-        driverId: TEST_DRIVER_ID,
+        
         endTime: "2026-01-26T13:00:00Z",
       })
       .expect(200);
@@ -279,20 +264,17 @@ describe.sequential("E2E: Work–Leave overlap (cross-domain)", () => {
       .post("/leave/record")
       .set(TEST_AUTH_HEADER)
       .send({
-        driverId: TEST_DRIVER_ID,
         leaveId: LEAVE_IDS.test7,
         startTime: "2026-01-26T11:00:00Z",
         endTime: "2026-01-26T12:00:00Z",
         reason: "Short leave",
       })
       .expect(400);
-
     await request(app)
       .post("/work/correct")
       .set(TEST_AUTH_HEADER)
       .send({
-        driverId: TEST_DRIVER_ID,
-        workPeriodId: WORK_IDS.test7,
+        workPeriodId: wpId,
         correctionId: CORRECTION_IDS.test7,
         correctedStartTime: "2026-01-26T09:00:00Z",
         correctedEndTime: "2026-01-26T10:00:00Z",

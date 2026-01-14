@@ -2,6 +2,7 @@ import request from "supertest";
 import { describe, it, expect } from "vitest";
 import { app } from "../../src/server";
 import { TEST_DRIVER_ID, TEST_AUTH_HEADER } from "./setup";  // ← Add TEST_AUTH_HEADER
+import { TOKEN_DRIVER_1 } from "../helpers/auth.helper";
 
 
 const LEAVE_IDS = {
@@ -30,18 +31,16 @@ const WORK_IDS = {
 describe.sequential("E2E: Leave lifecycle", () => {
 
   it("records a leave when no work exists", async () => {
-    await request(app)
-      .post("/leave/record")
-      .set(TEST_AUTH_HEADER)  // ← ADD
-      .send({
-        driverId: TEST_DRIVER_ID,
-        leaveId: LEAVE_IDS.test1,
-        startTime: "2026-01-12T10:00:00Z",
-        endTime: "2026-01-12T14:00:00Z",
-        reason: "Personal leave",
-      })
-      .expect(201);
-  });
+      await request(app)
+        .post("/leave/record")
+        .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)  // ✅ Use this
+        .send({
+          startTime: "2026-01-14T00:00:00Z",
+          endTime: "2026-01-14T23:59:00Z",
+          reason: "Personal leave",
+        })
+        .expect(201);
+    });
 
 
   it("rejects leave that overlaps with open work", async () => {
@@ -69,33 +68,30 @@ describe.sequential("E2E: Leave lifecycle", () => {
   });
 
 
-  it("allows correcting a leave when no work conflicts", async () => {
-    await request(app)
-      .post("/leave/record")
-      .set(TEST_AUTH_HEADER)  // ← ADD
-      .send({
-        driverId: TEST_DRIVER_ID,
-        leaveId: LEAVE_IDS.test3,
-        startTime: "2026-01-13T10:00:00Z",
-        endTime: "2026-01-13T12:00:00Z",
-        reason: "Initial leave",
-      })
-      .expect(201);
+    it("allows correcting a leave when no work conflicts", async () => {
+      const recordResponse = await request(app)
+        .post("/leave/record")
+        .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
+        .send({
+          startTime: "2026-01-13T10:00:00Z",
+          endTime: "2026-01-13T12:00:00Z",
+          reason: "Initial leave",
+        })
+        .expect(201);
 
-    await request(app)
-      .post("/leave/correct")
-      .set(TEST_AUTH_HEADER)  // ← ADD
-      .send({
-        driverId: TEST_DRIVER_ID,
-        leaveId: LEAVE_IDS.test3,
-        correctionId: CORRECTION_IDS.test3,
-        correctedStartTime: "2026-01-13T11:00:00Z",
-        correctedEndTime: "2026-01-13T13:00:00Z",
-        reason: "Adjusted timing",
-      })
-      .expect(201);
-  });
+      const { leaveId } = recordResponse.body;
 
+      await request(app)
+        .post("/leave/correct")
+        .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
+        .send({
+          leaveId,
+          correctedStartTime: "2026-01-13T11:00:00Z",
+          correctedEndTime: "2026-01-13T13:00:00Z",
+          reason: "Adjusted timing",
+        })
+        .expect(201);
+    });
 
   it("rejects leave correction that overlaps with open work", async () => {
     await request(app)
