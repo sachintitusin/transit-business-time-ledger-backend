@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { InMemoryWorkPeriodRepository } from '../fakes/InMemoryWorkPeriodRepository'
 import { InMemoryLeaveRepository } from '../fakes/InMemoryLeaveRepository'
 import { InMemoryLeaveCorrectionRepository } from '../fakes/InMemoryLeaveCorrectionRepository'
@@ -10,6 +11,9 @@ import { CorrectWorkService } from '../../src/application/services/work/CorrectW
 import { RecordLeaveService } from '../../src/application/services/leave/RecordLeaveService'
 
 import { FakeTransactionManager } from '../fakes/FakeTransactionManager'
+import { FakeLogger } from '../fakes/FakeLogger'
+import { MaxShiftDurationPolicy } from '../../src/application/policies/MaxShiftDurationPolicy'
+
 import { DriverId, LeaveId, WorkPeriodId } from '../../src/domain/shared/types'
 
 describe('Work–Leave overlap policy', () => {
@@ -20,20 +24,30 @@ describe('Work–Leave overlap policy', () => {
     const leaveRepo = new InMemoryLeaveRepository()
     const leaveCorrectionRepo = new InMemoryLeaveCorrectionRepository()
     const tx = new FakeTransactionManager()
+    const logger = new FakeLogger()
+    const policy = new MaxShiftDurationPolicy()
 
-    const startWork = new StartWorkService(workRepo, tx)
-    const closeWork = new CloseWorkService(
-      workRepo,
-      leaveRepo,
-      leaveCorrectionRepo,
-      tx
-    )
-    const recordLeave = new RecordLeaveService(
-      leaveRepo,
-      workRepo,
-      workCorrectionRepo,
-      tx
-    )
+    const startWork =
+      new StartWorkService(workRepo, tx, logger)
+
+    const closeWork =
+      new CloseWorkService(
+        workRepo,
+        leaveRepo,
+        leaveCorrectionRepo,
+        tx,
+        policy,
+        logger
+      )
+
+    const recordLeave =
+      new RecordLeaveService(
+        leaveRepo,
+        workRepo,
+        workCorrectionRepo,
+        tx,
+        logger
+      )
 
     const driverId = 'driver-1' as DriverId
     const leaveId = 'leave-1' as LeaveId
@@ -63,27 +77,41 @@ describe('Work–Leave overlap policy', () => {
     const leaveRepo = new InMemoryLeaveRepository()
     const leaveCorrectionRepo = new InMemoryLeaveCorrectionRepository()
     const tx = new FakeTransactionManager()
+    const logger = new FakeLogger()
+    const policy = new MaxShiftDurationPolicy()
 
-    const startWork = new StartWorkService(workRepo, tx)
-    const closeWork = new CloseWorkService(
-      workRepo,
-      leaveRepo,
-      leaveCorrectionRepo,
-      tx
-    )
-    const correctWork = new CorrectWorkService(
-      workRepo,
-      workCorrectionRepo,
-      leaveRepo,
-      leaveCorrectionRepo,
-      tx
-    )
-    const recordLeave = new RecordLeaveService(
-      leaveRepo,
-      workRepo,
-      workCorrectionRepo,
-      tx
-    )
+    const startWork =
+      new StartWorkService(workRepo, tx, logger)
+
+    const closeWork =
+      new CloseWorkService(
+        workRepo,
+        leaveRepo,
+        leaveCorrectionRepo,
+        tx,
+        policy,
+        logger
+      )
+
+    const correctWork =
+      new CorrectWorkService(
+        workRepo,
+        workCorrectionRepo,
+        leaveRepo,
+        leaveCorrectionRepo,
+        tx,
+        policy,
+        logger
+      )
+
+    const recordLeave =
+      new RecordLeaveService(
+        leaveRepo,
+        workRepo,
+        workCorrectionRepo,
+        tx,
+        logger
+      )
 
     const driverId = 'driver-1' as DriverId
     const workId = 'work-1' as WorkPeriodId
@@ -124,27 +152,41 @@ describe('Work–Leave overlap policy', () => {
     const leaveRepo = new InMemoryLeaveRepository()
     const leaveCorrectionRepo = new InMemoryLeaveCorrectionRepository()
     const tx = new FakeTransactionManager()
+    const logger = new FakeLogger()
+    const policy = new MaxShiftDurationPolicy()
 
-    const startWork = new StartWorkService(workRepo, tx)
-    const closeWork = new CloseWorkService(
-      workRepo,
-      leaveRepo,
-      leaveCorrectionRepo,
-      tx
-    )
-    const correctWork = new CorrectWorkService(
-      workRepo,
-      correctionRepo,
-      leaveRepo,
-      leaveCorrectionRepo,
-      tx
-    )
-    const recordLeave = new RecordLeaveService(
-      leaveRepo,
-      workRepo,
-      correctionRepo,
-      tx
-    )
+    const startWork =
+      new StartWorkService(workRepo, tx, logger)
+
+    const closeWork =
+      new CloseWorkService(
+        workRepo,
+        leaveRepo,
+        leaveCorrectionRepo,
+        tx,
+        policy,
+        logger
+      )
+
+    const correctWork =
+      new CorrectWorkService(
+        workRepo,
+        correctionRepo,
+        leaveRepo,
+        leaveCorrectionRepo,
+        tx,
+        policy,
+        logger
+      )
+
+    const recordLeave =
+      new RecordLeaveService(
+        leaveRepo,
+        workRepo,
+        correctionRepo,
+        tx,
+        logger
+      )
 
     const driverId = 'driver-1' as DriverId
     const workId = 'work-1' as WorkPeriodId
@@ -178,5 +220,4 @@ describe('Work–Leave overlap policy', () => {
       })
     ).rejects.toThrow()
   })
-
 })
