@@ -50,6 +50,8 @@ import { AuthenticateDriverService } from "./application/services/auth/Authentic
 import { GetLeaveCountSummaryService } from "./application/services/analytics/GetLeaveCountSummaryService";
 import { GetWorkSummaryService } from "./application/services/analytics/GetWorkSummaryService";
 import { GetMeService } from "./application/services/auth/GetMeService";
+import { GetEntriesService } from "./application/services/entries/GetEntriesService";
+import { GetEntryByIdService } from "./application/services/entries/GetEntryByIdService";
 
 // ======================================================================
 // Controllers
@@ -65,6 +67,8 @@ import { GetWorkSummaryController } from "./interfaces/http/controllers/analytic
 import { AuthenticateDriverController } from "./interfaces/http/controllers/auth/AuthenticateDriverController";
 import { GetMeController } from "./interfaces/http/controllers/me/GetMeController";
 import { GetWorkStatusController } from "./interfaces/http/controllers/work/GetWorkStatusController";
+import { GetEntriesController } from "./interfaces/http/controllers/entries/GetEntriesController";
+import { GetEntryByIdController } from "./interfaces/http/controllers/entries/GetEntryByIdController";
 
 // ======================================================================
 // Routes
@@ -76,6 +80,7 @@ import { createAnalyticsRoutes } from "./interfaces/http/routes/analytics.routes
 import { createAuthRoutes } from "./interfaces/http/routes/auth.routes";
 import { createMeRoutes } from "./interfaces/http/routes/me.routes";
 import { createWorkStatusRoutes } from "./interfaces/http/routes/workStatus.routes";
+import { createEntriesRoutes } from "./interfaces/http/routes/entries.routes";
 
 // ======================================================================
 // Middleware
@@ -128,13 +133,8 @@ const authMiddleware = requireAuth(jwtService);
 // ======================================================================
 // Command services
 // ======================================================================
-
 const startWorkService =
-  new StartWorkService(
-    workPeriodRepository,
-    transactionManager,
-    logger
-  );
+  new StartWorkService(workPeriodRepository, transactionManager, logger);
 
 const closeWorkService =
   new CloseWorkService(
@@ -194,9 +194,8 @@ const authenticateDriverService =
   );
 
 // ======================================================================
-// Query services
+// Query services (✅ FIXED)
 // ======================================================================
-
 const getLeaveCountSummaryService =
   new GetLeaveCountSummaryService(
     leaveRepository,
@@ -212,69 +211,63 @@ const getWorkSummaryService =
   );
 
 const getMeService =
-  new GetMeService(driverRepository);
+  new GetMeService(driverRepository, logger);
 
 const getWorkStatusService =
   new GetWorkStatusService(workPeriodRepository);
 
+const getEntriesService =
+  new GetEntriesService(
+    workPeriodRepository,
+    workCorrectionRepository,
+    leaveRepository,
+    leaveCorrectionRepository,
+    shiftTransferRepository,
+    logger
+  );
+
+const getEntryByIdService =
+  new GetEntryByIdService(
+    workPeriodRepository,
+    leaveRepository,
+    logger
+  );
+
 // ======================================================================
 // Controllers
 // ======================================================================
-
-const startWorkController =
-  new StartWorkController(startWorkService);
-
-const closeWorkController =
-  new CloseWorkController(closeWorkService);
-
-const correctWorkController =
-  new CorrectWorkController(correctWorkService);
-
-const recordLeaveController =
-  new RecordLeaveController(recordLeaveService);
-
-const leaveCorrectionController =
-  new LeaveCorrectionController(leaveCorrectionService);
-
-const recordShiftTransferController =
-  new RecordShiftTransferController(recordShiftTransferService);
-
-const getLeaveCountSummaryController =
-  new GetLeaveCountSummaryController(getLeaveCountSummaryService);
-
-const getWorkSummaryController =
-  new GetWorkSummaryController(getWorkSummaryService);
-
-const authenticateDriverController =
-  new AuthenticateDriverController(authenticateDriverService);
-
-const getMeController =
-  new GetMeController(getMeService);
-
-const getWorkStatusController =
-  new GetWorkStatusController(getWorkStatusService);
+const startWorkController = new StartWorkController(startWorkService);
+const closeWorkController = new CloseWorkController(closeWorkService);
+const correctWorkController = new CorrectWorkController(correctWorkService);
+const recordLeaveController = new RecordLeaveController(recordLeaveService);
+const leaveCorrectionController = new LeaveCorrectionController(leaveCorrectionService);
+const recordShiftTransferController = new RecordShiftTransferController(recordShiftTransferService);
+const getLeaveCountSummaryController = new GetLeaveCountSummaryController(getLeaveCountSummaryService);
+const getWorkSummaryController = new GetWorkSummaryController(getWorkSummaryService);
+const authenticateDriverController = new AuthenticateDriverController(authenticateDriverService);
+const getMeController = new GetMeController(getMeService);
+const getWorkStatusController = new GetWorkStatusController(getWorkStatusService);
+const getEntriesController = new GetEntriesController(getEntriesService);
+const getEntryByIdController = new GetEntryByIdController(getEntryByIdService);
 
 // ======================================================================
 // Routes
 // ======================================================================
-
-app.get("/health", (_, res) => {
-  res.json({ status: "ok" });
-});
+app.get("/health", (_, res) => res.json({ status: "ok" }));
 
 app.use("/auth", createAuthRoutes(authenticateDriverController));
+app.use("/me", authMiddleware, createMeRoutes(getMeController));
 
 app.use(
-  "/me",
+  "/entries",
   authMiddleware,
-  createMeRoutes(getMeController)
+  createEntriesRoutes(
+    getEntriesController,
+    getEntryByIdController
+  )
 );
 
-app.use(
-  "/work",
-  authMiddleware,
-  createWorkStatusRoutes(getWorkStatusController)
-);
+app.use("/work", authMiddleware, createWorkStatusRoutes(getWorkStatusController));
 
 app.use(
   "/work",
@@ -313,8 +306,7 @@ app.use(
 // ======================================================================
 // Global error handler
 // ======================================================================
-
-app.use((err: any, req: any, res: any, next: any) => {
+app.use((err: any, req: any, res: any, _next: any) => {
   logger.error("Unhandled HTTP error", {
     path: req.path,
     method: req.method,
@@ -333,7 +325,6 @@ app.use((err: any, req: any, res: any, next: any) => {
 // ======================================================================
 // Server start
 // ======================================================================
-
 const PORT = process.env.PORT || 3000;
 
 if (require.main === module) {
