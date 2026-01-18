@@ -3,11 +3,13 @@ import { LeaveCountSummary } from '../../../domain/analytics/LeaveCountSummary'
 import { DriverId } from '../../../domain/shared/types'
 import { LeaveRepository } from '../../ports/LeaveRepository'
 import { LeaveCorrectionRepository } from '../../ports/LeaveCorrectionRepository'
+import { AppLogger } from '../../ports/Logger'
 
 export class GetLeaveCountSummaryService {
   constructor(
     private readonly leaveRepository: LeaveRepository,
-    private readonly leaveCorrectionRepository: LeaveCorrectionRepository
+    private readonly leaveCorrectionRepository: LeaveCorrectionRepository,
+    private readonly logger: AppLogger
   ) {}
 
   async execute(query: {

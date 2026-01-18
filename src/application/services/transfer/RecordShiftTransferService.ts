@@ -1,6 +1,7 @@
 import { ShiftTransferRepository } from '../../ports/ShiftTransferRepository'
 import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository'
 import { TransactionManager } from '../../ports/TransactionManager'
+import { AppLogger } from '../../ports/Logger'
 
 import { ShiftTransferEvent } from '../../../domain/transfer/ShiftTransferEvent'
 import { DriverId, ShiftTransferId, WorkPeriodId } from '../../../domain/shared/types'
@@ -10,7 +11,8 @@ export class RecordShiftTransferService {
   constructor(
     private readonly shiftTransferRepo: ShiftTransferRepository,
     private readonly workPeriodRepo: WorkPeriodRepository,
-    private readonly transactionManager: TransactionManager
+    private readonly transactionManager: TransactionManager,
+    private readonly logger: AppLogger
   ) {}
 
   async execute(command: {

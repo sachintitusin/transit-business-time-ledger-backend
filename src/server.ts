@@ -19,9 +19,19 @@ import { GoogleTokenVerifierImpl } from "./infrastructure/auth/GoogleTokenVerifi
 import { JwtServiceImpl } from "./infrastructure/auth/JwtServiceImpl";
 
 // ======================================================================
+// Infrastructure – Logging
+// ======================================================================
+import { PinoAppLogger } from "./infrastructure/logging/PinoAppLogger";
+
+// ======================================================================
 // Infrastructure – Transaction
 // ======================================================================
 import { PrismaTransactionManager } from "./infrastructure/prisma/PrismaTransactionManager";
+
+// ======================================================================
+// Application Policies
+// ======================================================================
+import { MaxShiftDurationPolicy } from "./application/policies/MaxShiftDurationPolicy";
 
 // ======================================================================
 // Application Services (Commands)
@@ -76,6 +86,11 @@ export const app = express();
 app.use(express.json());
 
 // ======================================================================
+// Logger
+// ======================================================================
+const logger = new PinoAppLogger();
+
+// ======================================================================
 // Dependency Injection (Composition Root)
 // ======================================================================
 
@@ -92,6 +107,9 @@ const authIdentityRepository = new PrismaAuthIdentityRepository();
 // Transaction manager
 const transactionManager = new PrismaTransactionManager();
 
+// Policies
+const maxShiftDurationPolicy = new MaxShiftDurationPolicy();
+
 // Auth
 const googleTokenVerifier =
   new GoogleTokenVerifierImpl(process.env.GOOGLE_CLIENT_ID!);
@@ -101,11 +119,15 @@ const jwtService =
 
 const authMiddleware = requireAuth(jwtService);
 
+// ======================================================================
 // Command services
+// ======================================================================
+
 const startWorkService =
   new StartWorkService(
     workPeriodRepository,
-    transactionManager
+    transactionManager,
+    logger
   );
 
 const closeWorkService =
@@ -113,7 +135,9 @@ const closeWorkService =
     workPeriodRepository,
     leaveRepository,
     leaveCorrectionRepository,
-    transactionManager
+    transactionManager,
+    maxShiftDurationPolicy,
+    logger
   );
 
 const correctWorkService =
@@ -122,7 +146,9 @@ const correctWorkService =
     workCorrectionRepository,
     leaveRepository,
     leaveCorrectionRepository,
-    transactionManager
+    transactionManager,
+    maxShiftDurationPolicy,
+    logger
   );
 
 const recordLeaveService =
@@ -130,7 +156,8 @@ const recordLeaveService =
     leaveRepository,
     workPeriodRepository,
     workCorrectionRepository,
-    transactionManager
+    transactionManager,
+    logger
   );
 
 const leaveCorrectionService =
@@ -138,15 +165,16 @@ const leaveCorrectionService =
     leaveRepository,
     leaveCorrectionRepository,
     workPeriodRepository,
-    transactionManager
+    transactionManager,
+    logger
   );
 
-// 🔴 FIX WAS HERE: WorkPeriodRepository was missing
 const recordShiftTransferService =
   new RecordShiftTransferService(
     shiftTransferRepository,
     workPeriodRepository,
-    transactionManager
+    transactionManager,
+    logger
   );
 
 const authenticateDriverService =
@@ -155,23 +183,32 @@ const authenticateDriverService =
     googleTokenVerifier,
     jwtService,
     driverRepository,
-    authIdentityRepository
+    authIdentityRepository,
+    logger
   );
 
+// ======================================================================
 // Query services
+// ======================================================================
+
 const getLeaveCountSummaryService =
   new GetLeaveCountSummaryService(
     leaveRepository,
-    leaveCorrectionRepository
+    leaveCorrectionRepository,
+    logger
   );
 
 const getWorkSummaryService =
   new GetWorkSummaryService(
     workPeriodRepository,
-    workCorrectionRepository
+    workCorrectionRepository,
+    logger
   );
 
+// ======================================================================
 // Controllers
+// ======================================================================
+
 const startWorkController =
   new StartWorkController(startWorkService);
 
@@ -199,7 +236,10 @@ const getWorkSummaryController =
 const authenticateDriverController =
   new AuthenticateDriverController(authenticateDriverService);
 
+// ======================================================================
 // Routes
+// ======================================================================
+
 app.get("/health", (_, res) => {
   res.json({ status: "ok" });
 });
@@ -240,8 +280,16 @@ app.use(
   )
 );
 
+// ======================================================================
+// Global error handler
+// ======================================================================
+
 app.use((err: any, req: any, res: any, next: any) => {
-  console.error("Unhandled error:", err);
+  logger.error("Unhandled HTTP error", {
+    path: req.path,
+    method: req.method,
+    error: err,
+  });
 
   res.status(500).json({
     error: {
@@ -252,10 +300,14 @@ app.use((err: any, req: any, res: any, next: any) => {
   });
 });
 
+// ======================================================================
+// Server start
+// ======================================================================
+
 const PORT = process.env.PORT || 3000;
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    logger.info("Server started", { port: PORT });
   });
 }

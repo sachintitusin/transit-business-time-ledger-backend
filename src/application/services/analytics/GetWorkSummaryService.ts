@@ -3,11 +3,13 @@ import { WorkSummary } from '../../../domain/analytics/WorkSummary'
 import { DriverId } from '../../../domain/shared/types'
 import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository'
 import { WorkCorrectionRepository } from '../../ports/WorkCorrectionRepository'
+import { AppLogger } from '../../ports/Logger'
 
 export class GetWorkSummaryService {
   constructor(
     private readonly workPeriodRepository: WorkPeriodRepository,
-    private readonly workCorrectionRepository: WorkCorrectionRepository
+    private readonly workCorrectionRepository: WorkCorrectionRepository,
+    private readonly logger: AppLogger
   ) {}
 
   async execute(query: {

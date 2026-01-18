@@ -2,6 +2,7 @@ import { LeaveRepository } from '../../ports/LeaveRepository'
 import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository'
 import { WorkCorrectionRepository } from '../../ports/WorkCorrectionRepository'
 import { TransactionManager } from '../../ports/TransactionManager'
+import { AppLogger } from '../../ports/Logger'
 
 import { EffectiveLeaveTime } from '../../../domain/leave/EffectiveLeaveTime'
 import { EffectiveWorkTime } from '../../../domain/work/EffectiveWorkTime'
@@ -18,7 +19,8 @@ export class RecordLeaveService {
     private readonly leaveRepository: LeaveRepository,
     private readonly workPeriodRepository: WorkPeriodRepository,
     private readonly workCorrectionRepository: WorkCorrectionRepository,
-    private readonly transactionManager: TransactionManager
+    private readonly transactionManager: TransactionManager,
+    private readonly logger: AppLogger
   ) {}
 
   async execute(command: {
@@ -39,9 +41,6 @@ export class RecordLeaveService {
         reason,
       } = command
 
-      // ------------------------------------------------------------
-      // 1. Create leave (domain validation)
-      // ------------------------------------------------------------
       const leave = LeaveEvent.create(
         leaveId,
         driverId,
@@ -53,17 +52,10 @@ export class RecordLeaveService {
 
       const effectiveLeave = EffectiveLeaveTime.from(leave, [])
 
-      // ------------------------------------------------------------
-      // 2. Guard against OPEN work
-      // ------------------------------------------------------------
       const openWork =
         await this.workPeriodRepository.findOpenByDriver(driverId)
 
       if (openWork) {
-        /**
-         * OPEN work has no end.
-         * Treat it as running until the leave ends.
-         */
         const openWorkRange = TimeRange.create(
           openWork.declaredStartTime,
           effectiveLeave.range.end
@@ -77,15 +69,13 @@ export class RecordLeaveService {
         }
       }
 
-      // ------------------------------------------------------------
-      // 3. Guard against CLOSED work (using effective times)
-      // ------------------------------------------------------------
       const allWork = await this.workPeriodRepository.findByDriver(driverId)
       
       for (const work of allWork) {
-        if (work.isOpen()) continue // Already checked above
+        if (work.isOpen()) continue
 
-        const corrections = await this.workCorrectionRepository.findByWorkPeriodId(work.id)
+        const corrections =
+          await this.workCorrectionRepository.findByWorkPeriodId(work.id)
         const effectiveWork = EffectiveWorkTime.from(work, corrections)
 
         if (effectiveWork.range.overlaps(effectiveLeave.range)) {
@@ -97,9 +87,6 @@ export class RecordLeaveService {
         }
       }
 
-      // ------------------------------------------------------------
-      // 4. Persist (atomic)
-      // ------------------------------------------------------------
       await this.leaveRepository.save(leave)
     })
   }

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc && vite build",
+    "build": "tsc",
     "start": "NODE_ENV=production node dist/server.js",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write .",

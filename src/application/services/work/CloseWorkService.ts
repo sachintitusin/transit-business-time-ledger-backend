@@ -2,6 +2,7 @@ import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository'
 import { LeaveRepository } from '../../ports/LeaveRepository'
 import { LeaveCorrectionRepository } from '../../ports/LeaveCorrectionRepository'
 import { TransactionManager } from '../../ports/TransactionManager'
+import { AppLogger } from '../../ports/Logger'
 
 import { EffectiveLeaveTime } from '../../../domain/leave/EffectiveLeaveTime'
 import { WorkLeaveOverlapPolicy } from '../../policies/WorkLeaveOverlapPolicy'
@@ -17,7 +18,8 @@ export class CloseWorkService {
     private readonly leaveRepository: LeaveRepository,
     private readonly leaveCorrectionRepository: LeaveCorrectionRepository,
     private readonly transactionManager: TransactionManager,
-    private readonly maxShiftPolicy: MaxShiftDurationPolicy = new MaxShiftDurationPolicy()
+    private readonly maxShiftPolicy: MaxShiftDurationPolicy = new MaxShiftDurationPolicy(),
+    private readonly logger: AppLogger
   ) {}
 
   async execute(
@@ -25,7 +27,6 @@ export class CloseWorkService {
     endTime: Date
   ): Promise<void> {
     await this.transactionManager.run(async () => {
-      // 1. Load active work
       const workPeriod =
         await this.workPeriodRepository.findOpenByDriver(driverId)
 
@@ -33,16 +34,13 @@ export class CloseWorkService {
         throw NoActiveWorkPeriod()
       }
 
-      // 2. Create candidate work range (don't close yet)
       const candidateWorkRange = TimeRange.create(
         workPeriod.declaredStartTime,
         endTime
       )
 
-      // limiting work range
       this.maxShiftPolicy.validate(candidateWorkRange)
 
-      // Load leave data
       const leaves =
         await this.leaveRepository.findByDriver(driverId)
 
@@ -51,7 +49,6 @@ export class CloseWorkService {
       const leaveCorrections =
         await this.leaveCorrectionRepository.findByLeaveIds(leaveIds)
 
-      // 4. Compute effective leaves
       const effectiveLeaves = leaves.map(leave =>
         EffectiveLeaveTime.from(
           leave,
@@ -59,7 +56,6 @@ export class CloseWorkService {
         )
       )
 
-      // 5. Check for overlaps (I16 invariant)
       for (const effectiveLeave of effectiveLeaves) {
         if (candidateWorkRange.overlaps(effectiveLeave.range)) {
           throw new DomainError(
@@ -74,12 +70,13 @@ export class CloseWorkService {
           )
         }
       }
-      //overlapping works test
-      const overlappingWorks = await this.workPeriodRepository.findEffectiveOverlapping(
-        driverId,
-        candidateWorkRange,
-        workPeriod.id  // exclude self
-      )
+
+      const overlappingWorks =
+        await this.workPeriodRepository.findEffectiveOverlapping(
+          driverId,
+          candidateWorkRange,
+          workPeriod.id
+        )
 
       if (overlappingWorks.length > 0) {
         throw new DomainError(
@@ -93,10 +90,8 @@ export class CloseWorkService {
         )
       }
 
-      // 6. Now safe to close
       workPeriod.close(endTime)
 
-      // 7. Persist
       await this.workPeriodRepository.save(workPeriod)
     })
   }

@@ -2,6 +2,7 @@ import { LeaveRepository } from '../../ports/LeaveRepository'
 import { LeaveCorrectionRepository } from '../../ports/LeaveCorrectionRepository'
 import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository'
 import { TransactionManager } from '../../ports/TransactionManager'
+import { AppLogger } from '../../ports/Logger'
 
 import { LeaveCorrection } from '../../../domain/leave/LeaveCorrection'
 import { EffectiveLeaveTime } from '../../../domain/leave/EffectiveLeaveTime'
@@ -21,7 +22,8 @@ export class LeaveCorrectionService {
     private readonly leaveRepository: LeaveRepository,
     private readonly leaveCorrectionRepository: LeaveCorrectionRepository,
     private readonly workPeriodRepository: WorkPeriodRepository,
-    private readonly transactionManager: TransactionManager
+    private readonly transactionManager: TransactionManager,
+    private readonly logger: AppLogger
   ) {}
 
   async execute(command: {
@@ -44,9 +46,6 @@ export class LeaveCorrectionService {
         reason,
       } = command
 
-      // ------------------------------------------------------------
-      // 1. Load leave
-      // ------------------------------------------------------------
       const leave = await this.leaveRepository.findById(leaveId)
 
       if (!leave || leave.driverId !== driverId) {
@@ -56,9 +55,6 @@ export class LeaveCorrectionService {
         )
       }
 
-      // ------------------------------------------------------------
-      // 2. Create correction (domain validation)
-      // ------------------------------------------------------------
       const correction = LeaveCorrection.create(
         correctionId,
         leave,
@@ -68,32 +64,19 @@ export class LeaveCorrectionService {
         reason
       )
 
-      // ------------------------------------------------------------
-      // 3. Load existing corrections
-      // ------------------------------------------------------------
       const existingCorrections =
         await this.leaveCorrectionRepository.findByLeaveId(leave.id)
 
       const allCorrections = [...existingCorrections, correction]
 
-      // ------------------------------------------------------------
-      // 4. Compute CANDIDATE effective leave
-      // ------------------------------------------------------------
       const effectiveLeave =
         EffectiveLeaveTime.from(leave, allCorrections)
 
-      // ------------------------------------------------------------
-      // 5. Load ALL work periods for driver
-      // ------------------------------------------------------------
       const workPeriods =
         await this.workPeriodRepository.findByDriver(driverId)
 
-      // ------------------------------------------------------------
-      // 6. Enforce overlap against each work period
-      // ------------------------------------------------------------
       for (const work of workPeriods) {
         if (work.status === WorkPeriodStatus.OPEN) {
-          // OPEN work → manual range
           const openWorkRange = TimeRange.create(
             work.declaredStartTime,
             now
@@ -106,7 +89,6 @@ export class LeaveCorrectionService {
             )
           }
         } else {
-          // CLOSED work → effective work time
           const effectiveWork =
             EffectiveWorkTime.from(work, [])
 
@@ -117,9 +99,6 @@ export class LeaveCorrectionService {
         }
       }
 
-      // ------------------------------------------------------------
-      // 7. Persist correction (atomic)
-      // ------------------------------------------------------------
       await this.leaveCorrectionRepository.save(correction)
     })
   }

@@ -6,11 +6,13 @@ import {
 import { DriverId, WorkPeriodId, asWorkPeriodId } from '../../../domain/shared/types';
 import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository';
 import { TransactionManager } from '../../ports/TransactionManager';
+import { AppLogger } from '../../ports/Logger';
 
 export class StartWorkService {
   constructor(
     private readonly workPeriodRepository: WorkPeriodRepository,
-    private readonly transactionManager: TransactionManager
+    private readonly transactionManager: TransactionManager,
+    private readonly logger: AppLogger
   ) {}
 
   async execute(
@@ -26,7 +28,7 @@ export class StartWorkService {
       }
 
       const rawId = uuidv4();
-      const workPeriodId = asWorkPeriodId(rawId);  // ✅ Type-safe casting
+      const workPeriodId = asWorkPeriodId(rawId);
 
       const workPeriod = WorkPeriod.start(
         workPeriodId,
