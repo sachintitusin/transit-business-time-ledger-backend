@@ -18,6 +18,20 @@ export class PrismaDriverRepository implements DriverRepository {
     };
   }
 
+  async findById(id: any): Promise<Driver | null> {
+    const row = await transactionContext.get().driver.findUnique({
+      where: { id },
+    });
+
+    if (!row) return null;
+
+    return {
+      id: asDriverId(row.id),
+      email: row.email,
+      name: row.name ?? undefined,
+    };
+  }
+
   async save(driver: Driver): Promise<void> {
     await transactionContext.get().driver.create({
       data: {
