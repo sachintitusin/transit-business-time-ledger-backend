@@ -49,6 +49,7 @@ import { AuthenticateDriverService } from "./application/services/auth/Authentic
 // ======================================================================
 import { GetLeaveCountSummaryService } from "./application/services/analytics/GetLeaveCountSummaryService";
 import { GetWorkSummaryService } from "./application/services/analytics/GetWorkSummaryService";
+import { GetDailyAnalyticsService } from "./application/services/analytics/GetDailyAnalyticsService";
 import { GetMeService } from "./application/services/auth/GetMeService";
 import { GetEntriesService } from "./application/services/entries/GetEntriesService";
 import { GetEntryByIdService } from "./application/services/entries/GetEntryByIdService";
@@ -64,6 +65,7 @@ import { LeaveCorrectionController } from "./interfaces/http/controllers/leave/L
 import { RecordShiftTransferController } from "./interfaces/http/controllers/transfer/RecordShiftTransferController";
 import { GetLeaveCountSummaryController } from "./interfaces/http/controllers/analytics/GetLeaveCountSummaryController";
 import { GetWorkSummaryController } from "./interfaces/http/controllers/analytics/GetWorkSummaryController";
+import { GetDailyAnalyticsController } from "./interfaces/http/controllers/analytics/GetDailyAnalyticsController";
 import { AuthenticateDriverController } from "./interfaces/http/controllers/auth/AuthenticateDriverController";
 import { GetMeController } from "./interfaces/http/controllers/me/GetMeController";
 import { GetWorkStatusController } from "./interfaces/http/controllers/work/GetWorkStatusController";
@@ -86,6 +88,7 @@ import { createEntriesRoutes } from "./interfaces/http/routes/entries.routes";
 // Middleware
 // ======================================================================
 import { requireAuth } from "./interfaces/http/middlewares/requireAuth";
+import { errorHandler } from "./interfaces/http/middlewares/errorHandler";
 import { GetWorkStatusService } from "./domain/work/GetWorkStatusService";
 
 // ======================================================================
@@ -194,7 +197,7 @@ const authenticateDriverService =
   );
 
 // ======================================================================
-// Query services (✅ FIXED)
+// Query services
 // ======================================================================
 const getLeaveCountSummaryService =
   new GetLeaveCountSummaryService(
@@ -207,6 +210,15 @@ const getWorkSummaryService =
   new GetWorkSummaryService(
     workPeriodRepository,
     workCorrectionRepository,
+    logger
+  );
+
+const getDailyAnalyticsService =
+  new GetDailyAnalyticsService(
+    workPeriodRepository,
+    workCorrectionRepository,
+    leaveRepository,
+    leaveCorrectionRepository,
     logger
   );
 
@@ -242,9 +254,19 @@ const correctWorkController = new CorrectWorkController(correctWorkService);
 const recordLeaveController = new RecordLeaveController(recordLeaveService);
 const leaveCorrectionController = new LeaveCorrectionController(leaveCorrectionService);
 const recordShiftTransferController = new RecordShiftTransferController(recordShiftTransferService);
-const getLeaveCountSummaryController = new GetLeaveCountSummaryController(getLeaveCountSummaryService);
-const getWorkSummaryController = new GetWorkSummaryController(getWorkSummaryService);
-const authenticateDriverController = new AuthenticateDriverController(authenticateDriverService);
+
+const getLeaveCountSummaryController =
+  new GetLeaveCountSummaryController(getLeaveCountSummaryService);
+
+const getWorkSummaryController =
+  new GetWorkSummaryController(getWorkSummaryService);
+
+const getDailyAnalyticsController =
+  new GetDailyAnalyticsController(getDailyAnalyticsService);
+
+const authenticateDriverController =
+  new AuthenticateDriverController(authenticateDriverService);
+
 const getMeController = new GetMeController(getMeService);
 const getWorkStatusController = new GetWorkStatusController(getWorkStatusService);
 const getEntriesController = new GetEntriesController(getEntriesService);
@@ -299,28 +321,15 @@ app.use(
   authMiddleware,
   createAnalyticsRoutes(
     getLeaveCountSummaryController,
-    getWorkSummaryController
+    getWorkSummaryController,
+    getDailyAnalyticsController
   )
 );
 
 // ======================================================================
-// Global error handler
+// Global error handler (✅ CORRECT)
 // ======================================================================
-app.use((err: any, req: any, res: any, _next: any) => {
-  logger.error("Unhandled HTTP error", {
-    path: req.path,
-    method: req.method,
-    error: err,
-  });
-
-  res.status(500).json({
-    error: {
-      code: "INTERNAL_ERROR",
-      message: err.message || "Internal server error",
-      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
-    },
-  });
-});
+app.use(errorHandler);
 
 // ======================================================================
 // Server start
