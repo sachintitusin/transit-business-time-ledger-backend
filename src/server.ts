@@ -49,6 +49,7 @@ import { AuthenticateDriverService } from "./application/services/auth/Authentic
 // ======================================================================
 import { GetLeaveCountSummaryService } from "./application/services/analytics/GetLeaveCountSummaryService";
 import { GetWorkSummaryService } from "./application/services/analytics/GetWorkSummaryService";
+import { GetMeService } from "./application/services/auth/GetMeService";
 
 // ======================================================================
 // Controllers
@@ -62,6 +63,8 @@ import { RecordShiftTransferController } from "./interfaces/http/controllers/tra
 import { GetLeaveCountSummaryController } from "./interfaces/http/controllers/analytics/GetLeaveCountSummaryController";
 import { GetWorkSummaryController } from "./interfaces/http/controllers/analytics/GetWorkSummaryController";
 import { AuthenticateDriverController } from "./interfaces/http/controllers/auth/AuthenticateDriverController";
+import { GetMeController } from "./interfaces/http/controllers/me/GetMeController";
+import { GetWorkStatusController } from "./interfaces/http/controllers/work/GetWorkStatusController";
 
 // ======================================================================
 // Routes
@@ -71,11 +74,14 @@ import { createLeaveRoutes } from "./interfaces/http/routes/leave.routes";
 import { createTransferRoutes } from "./interfaces/http/routes/transfer.routes";
 import { createAnalyticsRoutes } from "./interfaces/http/routes/analytics.routes";
 import { createAuthRoutes } from "./interfaces/http/routes/auth.routes";
+import { createMeRoutes } from "./interfaces/http/routes/me.routes";
+import { createWorkStatusRoutes } from "./interfaces/http/routes/workStatus.routes";
 
 // ======================================================================
 // Middleware
 // ======================================================================
 import { requireAuth } from "./interfaces/http/middlewares/requireAuth";
+import { GetWorkStatusService } from "./domain/work/GetWorkStatusService";
 
 // ======================================================================
 // Bootstrap
@@ -205,6 +211,12 @@ const getWorkSummaryService =
     logger
   );
 
+const getMeService =
+  new GetMeService(driverRepository);
+
+const getWorkStatusService =
+  new GetWorkStatusService(workPeriodRepository);
+
 // ======================================================================
 // Controllers
 // ======================================================================
@@ -236,6 +248,12 @@ const getWorkSummaryController =
 const authenticateDriverController =
   new AuthenticateDriverController(authenticateDriverService);
 
+const getMeController =
+  new GetMeController(getMeService);
+
+const getWorkStatusController =
+  new GetWorkStatusController(getWorkStatusService);
+
 // ======================================================================
 // Routes
 // ======================================================================
@@ -245,6 +263,18 @@ app.get("/health", (_, res) => {
 });
 
 app.use("/auth", createAuthRoutes(authenticateDriverController));
+
+app.use(
+  "/me",
+  authMiddleware,
+  createMeRoutes(getMeController)
+);
+
+app.use(
+  "/work",
+  authMiddleware,
+  createWorkStatusRoutes(getWorkStatusController)
+);
 
 app.use(
   "/work",
