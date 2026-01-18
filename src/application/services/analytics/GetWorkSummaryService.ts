@@ -18,22 +18,45 @@ export class GetWorkSummaryService {
   }): Promise<WorkSummary> {
     const { driverId, range } = query
 
-    const workPeriods =
-      await this.workPeriodRepository.findClosedByDriver(driverId)
+    this.logger.info('GetWorkSummary invoked', {
+      driverId,
+      rangeStart: range.start,
+      rangeEnd: range.end,
+    })
 
-    const correctionsMap = new Map()
+    try {
+      const workPeriods =
+        await this.workPeriodRepository.findClosedByDriver(driverId)
 
-    for (const work of workPeriods) {
-      const corrections =
-        await this.workCorrectionRepository.findByWorkPeriodId(work.id)
+      const correctionsMap = new Map()
 
-      correctionsMap.set(work.id, corrections)
+      for (const work of workPeriods) {
+        const corrections =
+          await this.workCorrectionRepository.findByWorkPeriodId(work.id)
+
+        correctionsMap.set(work.id, corrections)
+      }
+
+      const summary =
+        WorkSummary.calculate(
+          range,
+          workPeriods,
+          correctionsMap
+        )
+
+      this.logger.info('GetWorkSummary succeeded', {
+        driverId,
+        totalHours: summary.totalHours,
+        workPeriodCount: workPeriods.length,
+      })
+
+      return summary
+    } catch (err) {
+      this.logger.error('GetWorkSummary failed unexpectedly', {
+        driverId,
+        error: err,
+      })
+      throw err
     }
-
-    return WorkSummary.calculate(
-      range,
-      workPeriods,
-      correctionsMap
-    )
   }
 }

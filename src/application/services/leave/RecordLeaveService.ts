@@ -31,63 +31,99 @@ export class RecordLeaveService {
     now: Date
     reason?: string
   }): Promise<void> {
-    await this.transactionManager.run(async () => {
-      const {
-        driverId,
-        leaveId,
-        startTime,
-        endTime,
-        now,
-        reason,
-      } = command
+    const { driverId, leaveId, startTime, endTime } = command
 
-      const leave = LeaveEvent.create(
-        leaveId,
-        driverId,
-        startTime,
-        endTime,
-        now,
-        reason
-      )
-
-      const effectiveLeave = EffectiveLeaveTime.from(leave, [])
-
-      const openWork =
-        await this.workPeriodRepository.findOpenByDriver(driverId)
-
-      if (openWork) {
-        const openWorkRange = TimeRange.create(
-          openWork.declaredStartTime,
-          effectiveLeave.range.end
-        )
-
-        if (openWorkRange.overlaps(effectiveLeave.range)) {
-          throw new DomainError(
-            'WORK_OVERLAPS_LEAVE',
-            'Cannot record leave overlapping an open work period'
-          )
-        }
-      }
-
-      const allWork = await this.workPeriodRepository.findByDriver(driverId)
-      
-      for (const work of allWork) {
-        if (work.isOpen()) continue
-
-        const corrections =
-          await this.workCorrectionRepository.findByWorkPeriodId(work.id)
-        const effectiveWork = EffectiveWorkTime.from(work, corrections)
-
-        if (effectiveWork.range.overlaps(effectiveLeave.range)) {
-          throw new DomainError(
-            'LEAVE_OVERLAPS_WORK',
-            'Leave period overlaps with existing work period',
-            { workPeriodId: work.id }
-          )
-        }
-      }
-
-      await this.leaveRepository.save(leave)
+    this.logger.info('RecordLeave invoked', {
+      driverId,
+      leaveId,
+      startTime,
+      endTime,
     })
+
+    try {
+      await this.transactionManager.run(async () => {
+        const {
+          now,
+          reason,
+        } = command
+
+        const leave =
+          LeaveEvent.create(
+            leaveId,
+            driverId,
+            startTime,
+            endTime,
+            now,
+            reason
+          )
+
+        const effectiveLeave =
+          EffectiveLeaveTime.from(leave, [])
+
+        const openWork =
+          await this.workPeriodRepository.findOpenByDriver(driverId)
+
+        if (openWork) {
+          const openWorkRange =
+            TimeRange.create(
+              openWork.declaredStartTime,
+              effectiveLeave.range.end
+            )
+
+          if (openWorkRange.overlaps(effectiveLeave.range)) {
+            throw new DomainError(
+              'WORK_OVERLAPS_LEAVE',
+              'Cannot record leave overlapping an open work period'
+            )
+          }
+        }
+
+        const allWork =
+          await this.workPeriodRepository.findByDriver(driverId)
+
+        for (const work of allWork) {
+          if (work.isOpen()) continue
+
+          const corrections =
+            await this.workCorrectionRepository.findByWorkPeriodId(work.id)
+
+          const effectiveWork =
+            EffectiveWorkTime.from(work, corrections)
+
+          if (effectiveWork.range.overlaps(effectiveLeave.range)) {
+            throw new DomainError(
+              'LEAVE_OVERLAPS_WORK',
+              'Leave period overlaps with existing work period',
+              { workPeriodId: work.id }
+            )
+          }
+        }
+
+        await this.leaveRepository.save(leave)
+      })
+
+      this.logger.info('RecordLeave succeeded', {
+        driverId,
+        leaveId,
+      })
+    } catch (err) {
+      if (err instanceof DomainError) {
+        this.logger.warn('RecordLeave rejected', {
+          driverId,
+          leaveId,
+          code: err.code,
+          message: err.message,
+        })
+        throw err
+      }
+
+      this.logger.error('RecordLeave failed unexpectedly', {
+        driverId,
+        leaveId,
+        error: err,
+      })
+
+      throw err
+    }
   }
 }

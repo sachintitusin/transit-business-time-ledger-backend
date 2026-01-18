@@ -25,54 +25,84 @@ export class AuthenticateDriverService {
   async execute(
     googleIdToken: string
   ): Promise<{ driverId: DriverId; token: string }> {
-    return this.txManager.run(async () => {
-      const profile = await this.googleVerifier.verify(googleIdToken)
+    this.logger.info('AuthenticateDriver invoked')
 
-      if (!profile.email_verified) {
-        throw new EmailNotVerifiedError(profile.email)
-      }
+    try {
+      return await this.txManager.run(async () => {
+        const profile =
+          await this.googleVerifier.verify(googleIdToken)
 
-      const existingIdentity =
-        await this.authIdentityRepo.findByProviderAndUserId(
-          'google',
-          profile.sub
-        )
+        if (!profile.email_verified) {
+          throw new EmailNotVerifiedError(profile.email)
+        }
 
-      let driverId: DriverId
+        const existingIdentity =
+          await this.authIdentityRepo.findByProviderAndUserId(
+            'google',
+            profile.sub
+          )
 
-      if (existingIdentity) {
-        driverId = existingIdentity.driverId
-      } else {
-        const existingDriver =
-          await this.driverRepo.findByEmail(profile.email)
+        let driverId: DriverId
+        let isNewDriver = false
 
-        if (existingDriver) {
-          driverId = existingDriver.id
+        if (existingIdentity) {
+          driverId = existingIdentity.driverId
         } else {
-          driverId = asDriverId(crypto.randomUUID())
+          const existingDriver =
+            await this.driverRepo.findByEmail(profile.email)
 
-          await this.driverRepo.save({
-            id: driverId,
+          if (existingDriver) {
+            driverId = existingDriver.id
+          } else {
+            driverId = asDriverId(crypto.randomUUID())
+            isNewDriver = true
+
+            await this.driverRepo.save({
+              id: driverId,
+              email: profile.email,
+              name: profile.name,
+            })
+          }
+
+          await this.authIdentityRepo.save({
+            driverId,
+            provider: 'google',
+            providerUserId: profile.sub,
             email: profile.email,
-            name: profile.name,
           })
         }
 
-        await this.authIdentityRepo.save({
+        const token =
+          this.jwtService.sign({
+            driverId,
+            sub: driverId,
+            email: profile.email,
+          })
+
+        this.logger.info('AuthenticateDriver succeeded', {
           driverId,
+          newAccount: isNewDriver,
           provider: 'google',
-          providerUserId: profile.sub,
-          email: profile.email,
         })
+
+        return { driverId, token }
+      })
+    } catch (err) {
+      if (
+        err instanceof InvalidGoogleTokenError ||
+        err instanceof EmailNotVerifiedError
+      ) {
+        this.logger.warn('AuthenticateDriver rejected', {
+          reason: err.name,
+        })
+        throw err
       }
 
-      const token = this.jwtService.sign({
-        driverId,
-        sub: driverId,
-        email: profile.email,
+      this.logger.error('AuthenticateDriver failed unexpectedly', {
+        error: err,
       })
 
-      return { driverId, token }
-    })
+      throw err
+    }
   }
 }

@@ -18,22 +18,45 @@ export class GetLeaveCountSummaryService {
   }): Promise<LeaveCountSummary> {
     const { driverId, range } = query
 
-    const leaves =
-      await this.leaveRepository.findByDriver(driverId)
+    this.logger.info('GetLeaveCountSummary invoked', {
+      driverId,
+      rangeStart: range.start,
+      rangeEnd: range.end,
+    })
 
-    const correctionsMap = new Map()
+    try {
+      const leaves =
+        await this.leaveRepository.findByDriver(driverId)
 
-    for (const leave of leaves) {
-      const corrections =
-        await this.leaveCorrectionRepository.findByLeaveId(leave.id)
+      const correctionsMap = new Map()
 
-      correctionsMap.set(leave.id, corrections)
+      for (const leave of leaves) {
+        const corrections =
+          await this.leaveCorrectionRepository.findByLeaveId(leave.id)
+
+        correctionsMap.set(leave.id, corrections)
+      }
+
+      const summary =
+        LeaveCountSummary.calculate(
+          range,
+          leaves,
+          correctionsMap
+        )
+
+      this.logger.info('GetLeaveCountSummary succeeded', {
+        driverId,
+        totalLeaves: summary.totalLeaves,
+      })
+
+
+      return summary
+    } catch (err) {
+      this.logger.error('GetLeaveCountSummary failed unexpectedly', {
+        driverId,
+        error: err,
+      })
+      throw err
     }
-
-    return LeaveCountSummary.calculate(
-      range,
-      leaves,
-      correctionsMap
-    )
   }
 }

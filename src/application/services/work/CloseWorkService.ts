@@ -5,7 +5,6 @@ import { TransactionManager } from '../../ports/TransactionManager'
 import { AppLogger } from '../../ports/Logger'
 
 import { EffectiveLeaveTime } from '../../../domain/leave/EffectiveLeaveTime'
-import { WorkLeaveOverlapPolicy } from '../../policies/WorkLeaveOverlapPolicy'
 import { NoActiveWorkPeriod } from '../../../domain/work/WorkPeriodErrors'
 import { DriverId } from '../../../domain/shared/types'
 import { DomainError } from '../../../domain/shared/DomainError'
@@ -26,73 +25,103 @@ export class CloseWorkService {
     driverId: DriverId,
     endTime: Date
   ): Promise<void> {
-    await this.transactionManager.run(async () => {
-      const workPeriod =
-        await this.workPeriodRepository.findOpenByDriver(driverId)
+    this.logger.info('CloseWork invoked', {
+      driverId,
+      endTime,
+    })
 
-      if (!workPeriod) {
-        throw NoActiveWorkPeriod()
-      }
+    try {
+      await this.transactionManager.run(async () => {
+        const workPeriod =
+          await this.workPeriodRepository.findOpenByDriver(driverId)
 
-      const candidateWorkRange = TimeRange.create(
-        workPeriod.declaredStartTime,
-        endTime
-      )
+        if (!workPeriod) {
+          throw NoActiveWorkPeriod()
+        }
 
-      this.maxShiftPolicy.validate(candidateWorkRange)
+        const candidateWorkRange =
+          TimeRange.create(
+            workPeriod.declaredStartTime,
+            endTime
+          )
 
-      const leaves =
-        await this.leaveRepository.findByDriver(driverId)
+        this.maxShiftPolicy.validate(candidateWorkRange)
 
-      const leaveIds = leaves.map(l => l.id)
+        const leaves =
+          await this.leaveRepository.findByDriver(driverId)
 
-      const leaveCorrections =
-        await this.leaveCorrectionRepository.findByLeaveIds(leaveIds)
+        const leaveIds = leaves.map(l => l.id)
 
-      const effectiveLeaves = leaves.map(leave =>
-        EffectiveLeaveTime.from(
-          leave,
-          leaveCorrections.filter(c => c.leaveId === leave.id)
-        )
-      )
+        const leaveCorrections =
+          await this.leaveCorrectionRepository.findByLeaveIds(leaveIds)
 
-      for (const effectiveLeave of effectiveLeaves) {
-        if (candidateWorkRange.overlaps(effectiveLeave.range)) {
+        const effectiveLeaves =
+          leaves.map(leave =>
+            EffectiveLeaveTime.from(
+              leave,
+              leaveCorrections.filter(c => c.leaveId === leave.id)
+            )
+          )
+
+        for (const effectiveLeave of effectiveLeaves) {
+          if (candidateWorkRange.overlaps(effectiveLeave.range)) {
+            throw new DomainError(
+              'WORK_OVERLAPS_LEAVE',
+              'Cannot close work period: overlaps with recorded leave',
+              {
+                workStart: candidateWorkRange.start,
+                workEnd: candidateWorkRange.end,
+                leaveStart: effectiveLeave.range.start,
+                leaveEnd: effectiveLeave.range.end,
+              }
+            )
+          }
+        }
+
+        const overlappingWorks =
+          await this.workPeriodRepository.findEffectiveOverlapping(
+            driverId,
+            candidateWorkRange,
+            workPeriod.id
+          )
+
+        if (overlappingWorks.length > 0) {
           throw new DomainError(
-            'WORK_OVERLAPS_LEAVE',
-            'Cannot close work period: overlaps with recorded leave',
+            'WORK_OVERLAPS_WORK',
+            'Cannot close work period: overlaps with existing effective work time',
             {
               workStart: candidateWorkRange.start,
               workEnd: candidateWorkRange.end,
-              leaveStart: effectiveLeave.range.start,
-              leaveEnd: effectiveLeave.range.end,
+              overlappingWorkIds: overlappingWorks.map(w => w.id),
             }
           )
         }
-      }
 
-      const overlappingWorks =
-        await this.workPeriodRepository.findEffectiveOverlapping(
+        workPeriod.close(endTime)
+
+        await this.workPeriodRepository.save(workPeriod)
+      })
+
+      this.logger.info('CloseWork succeeded', {
+        driverId,
+        endTime,
+      })
+    } catch (err) {
+      if (err instanceof DomainError) {
+        this.logger.warn('CloseWork rejected', {
           driverId,
-          candidateWorkRange,
-          workPeriod.id
-        )
-
-      if (overlappingWorks.length > 0) {
-        throw new DomainError(
-          'WORK_OVERLAPS_WORK',
-          'Cannot close work period: overlaps with existing effective work time',
-          {
-            workStart: candidateWorkRange.start,
-            workEnd: candidateWorkRange.end,
-            overlappingWorkIds: overlappingWorks.map(w => w.id),
-          }
-        )
+          code: err.code,
+          message: err.message,
+        })
+        throw err
       }
 
-      workPeriod.close(endTime)
+      this.logger.error('CloseWork failed unexpectedly', {
+        driverId,
+        error: err,
+      })
 
-      await this.workPeriodRepository.save(workPeriod)
-    })
+      throw err
+    }
   }
 }
