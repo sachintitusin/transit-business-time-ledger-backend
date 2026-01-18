@@ -16,8 +16,19 @@ export class GetEntriesService {
     private readonly logger: AppLogger
   ) {}
 
-  async execute(driverId: DriverId) {
-    this.logger.info('GetEntries invoked', { driverId });
+  async execute(command: {
+    driverId: DriverId;
+    range?: {
+      from: Date;
+      to: Date;
+    };
+  }) {
+    const { driverId, range } = command;
+
+    this.logger.info("GetEntries invoked", {
+      driverId,
+      range,
+    });
 
     try {
       // ---------------------------
@@ -95,21 +106,38 @@ export class GetEntriesService {
       }));
 
       // ---------------------------
-      // MERGE + SORT TIMELINE
+      // MERGE
       // ---------------------------
-      const all = [
+      let all = [
         ...workEntries,
         ...leaveEntries,
         ...transferEntries,
       ];
 
+      // ---------------------------
+      // OPTIONAL RANGE FILTER
+      // ---------------------------
+      if (range) {
+        all = all.filter((e: any) => {
+          const time = e.startTime ?? e.createdAt;
+          const t = new Date(time).getTime();
+          return (
+            t >= range.from.getTime() &&
+            t <= range.to.getTime()
+          );
+        });
+      }
+
+      // ---------------------------
+      // SORT TIMELINE
+      // ---------------------------
       all.sort((a: any, b: any) => {
         const ta = a.startTime ?? a.createdAt;
         const tb = b.startTime ?? b.createdAt;
         return new Date(ta).getTime() - new Date(tb).getTime();
       });
 
-      this.logger.info('GetEntries succeeded', {
+      this.logger.info("GetEntries succeeded", {
         driverId,
         totalEntries: all.length,
         workCount: workEntries.length,
@@ -119,7 +147,7 @@ export class GetEntriesService {
 
       return { entries: all };
     } catch (err) {
-      this.logger.error('GetEntries failed unexpectedly', {
+      this.logger.error("GetEntries failed unexpectedly", {
         driverId,
         error: err,
       });
