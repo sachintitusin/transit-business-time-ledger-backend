@@ -27,7 +27,6 @@ export function requireAuth(jwtService: JwtService) {
 
     try {
       const payload = jwtService.verify(token);
-
       if (!payload.driverId) {
         throw new Error("Missing driverId in token");
       }
@@ -35,7 +34,6 @@ export function requireAuth(jwtService: JwtService) {
       // Attach driverId to request
       (req as AuthenticatedRequest).driverId =
         asDriverId(payload.driverId);
-
       next();
     } catch (error) {
       

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const StartWorkRequestSchema = z.object({
   startTime: z.string().datetime({ message: 'startTime must be a valid ISO 8601 datetime' }),
+  workPeriodId: z.string().uuid(),
 });
 
 export type StartWorkRequest = z.infer<typeof StartWorkRequestSchema>;

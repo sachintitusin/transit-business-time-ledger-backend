@@ -9,6 +9,7 @@ export function validateBody<T extends z.ZodTypeAny>(schema: T) {
       req.body = validated;
       next();
     } catch (error) {
+      console.log(error)
       if (error instanceof ZodError) {
         res.status(400).json({
           error: {

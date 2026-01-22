@@ -1,5 +1,6 @@
 import express from "express";
 import { config } from "dotenv";
+import cors from "cors";
 
 // ======================================================================
 // Infrastructure – Repositories
@@ -11,6 +12,7 @@ import { PrismaLeaveCorrectionRepository } from "./infrastructure/repositories/P
 import { PrismaShiftTransferRepository } from "./infrastructure/repositories/PrismaShiftTransferRepository";
 import { PrismaDriverRepository } from "./infrastructure/repositories/PrismaDriverRepository";
 import { PrismaAuthIdentityRepository } from "./infrastructure/repositories/PrismaAuthIdentityRepository";
+import { PrismaEntryProjectionRepository } from "./infrastructure/repositories/PrismaEntryProjectionRepository";
 
 // ======================================================================
 // Infrastructure – Auth
@@ -96,98 +98,116 @@ import { GetWorkStatusService } from "./domain/work/GetWorkStatusService";
 // ======================================================================
 config();
 
-export const app = express();
-app.use(express.json());
-
 // ======================================================================
-// Logger
+// APP FACTORY (✅ ENTERPRISE-CLEAN)
 // ======================================================================
-const logger = new PinoAppLogger();
+export function createApp() {
+  const app = express();
 
-// ======================================================================
-// Dependency Injection (Composition Root)
-// ======================================================================
+  app.use(
+    cors({
+      origin: "http://localhost:5173",
+      credentials: true,
+    })
+  );
 
-// Repositories
-const workPeriodRepository = new PrismaWorkPeriodRepository();
-const workCorrectionRepository = new PrismaWorkCorrectionRepository();
-const leaveRepository = new PrismaLeaveRepository();
-const leaveCorrectionRepository = new PrismaLeaveCorrectionRepository();
-const shiftTransferRepository = new PrismaShiftTransferRepository();
+  app.use(express.json());
 
-const driverRepository = new PrismaDriverRepository();
-const authIdentityRepository = new PrismaAuthIdentityRepository();
+  // ====================================================================
+  // Logger
+  // ====================================================================
+  const logger = new PinoAppLogger();
 
-// Transaction manager
-const transactionManager = new PrismaTransactionManager();
+  // ====================================================================
+  // Repositories
+  // ====================================================================
+  const workPeriodRepository = new PrismaWorkPeriodRepository();
+  const workCorrectionRepository = new PrismaWorkCorrectionRepository();
+  const leaveRepository = new PrismaLeaveRepository();
+  const leaveCorrectionRepository = new PrismaLeaveCorrectionRepository();
+  const shiftTransferRepository = new PrismaShiftTransferRepository();
 
-// Policies
-const maxShiftDurationPolicy = new MaxShiftDurationPolicy();
+  const driverRepository = new PrismaDriverRepository();
+  const authIdentityRepository = new PrismaAuthIdentityRepository();
+  const entryProjectionRepository = new PrismaEntryProjectionRepository();
 
-// Auth
-const googleTokenVerifier =
-  new GoogleTokenVerifierImpl(process.env.GOOGLE_CLIENT_ID!);
+  // ====================================================================
+  // Transaction manager
+  // ====================================================================
+  const transactionManager = new PrismaTransactionManager();
 
-const jwtService =
-  new JwtServiceImpl(process.env.JWT_SECRET!);
+  // ====================================================================
+  // Policies
+  // ====================================================================
+  const maxShiftDurationPolicy = new MaxShiftDurationPolicy();
 
-const authMiddleware = requireAuth(jwtService);
+  // ====================================================================
+  // Auth
+  // ====================================================================
+  const googleTokenVerifier = new GoogleTokenVerifierImpl(
+    process.env.GOOGLE_CLIENT_ID!
+  );
 
-// ======================================================================
-// Command services
-// ======================================================================
-const startWorkService =
-  new StartWorkService(workPeriodRepository, transactionManager, logger);
+  const jwtService = new JwtServiceImpl(process.env.JWT_SECRET!);
+  const authMiddleware = requireAuth(jwtService);
 
-const closeWorkService =
-  new CloseWorkService(
+  // ====================================================================
+  // Command services
+  // ====================================================================
+  const startWorkService = new StartWorkService(
+    workPeriodRepository,
+    entryProjectionRepository,
+    transactionManager,
+    logger
+  );
+
+  const closeWorkService = new CloseWorkService(
     workPeriodRepository,
     leaveRepository,
     leaveCorrectionRepository,
+    entryProjectionRepository,
     transactionManager,
     maxShiftDurationPolicy,
     logger
   );
 
-const correctWorkService =
-  new CorrectWorkService(
+  const correctWorkService = new CorrectWorkService(
     workPeriodRepository,
     workCorrectionRepository,
     leaveRepository,
     leaveCorrectionRepository,
+    entryProjectionRepository,
     transactionManager,
     maxShiftDurationPolicy,
     logger
   );
 
-const recordLeaveService =
-  new RecordLeaveService(
+  const recordLeaveService = new RecordLeaveService(
     leaveRepository,
     workPeriodRepository,
     workCorrectionRepository,
+    entryProjectionRepository,
     transactionManager,
     logger
   );
 
-const leaveCorrectionService =
-  new LeaveCorrectionService(
+  const leaveCorrectionService = new LeaveCorrectionService(
     leaveRepository,
     leaveCorrectionRepository,
     workPeriodRepository,
+    entryProjectionRepository,
     transactionManager,
     logger
   );
 
-const recordShiftTransferService =
-  new RecordShiftTransferService(
+  const recordShiftTransferService = new RecordShiftTransferService(
     shiftTransferRepository,
     workPeriodRepository,
     transactionManager,
     logger
   );
 
-const authenticateDriverService =
-  new AuthenticateDriverService(
+  const authenticateDriverService = new AuthenticateDriverService(
     transactionManager,
     googleTokenVerifier,
     jwtService,
@@ -196,25 +216,22 @@ const authenticateDriverService =
     logger
   );
 
-// ======================================================================
-// Query services
-// ======================================================================
-const getLeaveCountSummaryService =
-  new GetLeaveCountSummaryService(
+  // ====================================================================
+  // Query services
+  // ====================================================================
+  const getLeaveCountSummaryService = new GetLeaveCountSummaryService(
     leaveRepository,
     leaveCorrectionRepository,
     logger
   );
 
-const getWorkSummaryService =
-  new GetWorkSummaryService(
+  const getWorkSummaryService = new GetWorkSummaryService(
     workPeriodRepository,
     workCorrectionRepository,
     logger
   );
 
-const getDailyAnalyticsService =
-  new GetDailyAnalyticsService(
+  const getDailyAnalyticsService = new GetDailyAnalyticsService(
     workPeriodRepository,
     workCorrectionRepository,
     leaveRepository,
@@ -222,122 +239,119 @@ const getDailyAnalyticsService =
     logger
   );
 
-const getMeService =
-  new GetMeService(driverRepository, logger);
+  const getMeService = new GetMeService(driverRepository, logger);
+  const getWorkStatusService = new GetWorkStatusService(workPeriodRepository);
 
-const getWorkStatusService =
-  new GetWorkStatusService(workPeriodRepository);
-
-const getEntriesService =
-  new GetEntriesService(
-    workPeriodRepository,
-    workCorrectionRepository,
-    leaveRepository,
-    leaveCorrectionRepository,
-    shiftTransferRepository,
+  const getEntriesService = new GetEntriesService(
+    entryProjectionRepository,
     logger
   );
 
-const getEntryByIdService =
-  new GetEntryByIdService(
-    workPeriodRepository,
-    leaveRepository,
+  const getEntryByIdService = new GetEntryByIdService(
+    entryProjectionRepository,
     logger
   );
 
+  // ====================================================================
+  // Controllers
+  // ====================================================================
+  const startWorkController = new StartWorkController(startWorkService);
+  const closeWorkController = new CloseWorkController(closeWorkService);
+  const correctWorkController = new CorrectWorkController(correctWorkService);
+  const recordLeaveController = new RecordLeaveController(recordLeaveService);
+  const leaveCorrectionController = new LeaveCorrectionController(
+    leaveCorrectionService
+  );
+  const recordShiftTransferController = new RecordShiftTransferController(
+    recordShiftTransferService
+  );
+
+  const getLeaveCountSummaryController =
+    new GetLeaveCountSummaryController(getLeaveCountSummaryService);
+
+  const getWorkSummaryController =
+    new GetWorkSummaryController(getWorkSummaryService);
+
+  const getDailyAnalyticsController =
+    new GetDailyAnalyticsController(getDailyAnalyticsService);
+
+  const authenticateDriverController = new AuthenticateDriverController(
+    authenticateDriverService
+  );
+
+  const getMeController = new GetMeController(getMeService);
+  const getWorkStatusController = new GetWorkStatusController(
+    getWorkStatusService
+  );
+  const getEntriesController = new GetEntriesController(getEntriesService);
+  const getEntryByIdController = new GetEntryByIdController(
+    getEntryByIdService
+  );
+
+  // ====================================================================
+  // Routes
+  // ====================================================================
+  app.get("/health", (_, res) => res.json({ status: "ok" }));
+
+  app.use("/auth", createAuthRoutes(authenticateDriverController));
+  app.use("/me", authMiddleware, createMeRoutes(getMeController));
+
+  app.use(
+    "/entries",
+    authMiddleware,
+    createEntriesRoutes(getEntriesController, getEntryByIdController)
+  );
+
+  app.use("/work", authMiddleware, createWorkStatusRoutes(getWorkStatusController));
+
+  app.use(
+    "/work",
+    authMiddleware,
+    createWorkRoutes(
+      startWorkController,
+      closeWorkController,
+      correctWorkController
+    )
+  );
+
+  app.use(
+    "/leave",
+    authMiddleware,
+    createLeaveRoutes(recordLeaveController, leaveCorrectionController)
+  );
+
+  app.use(
+    "/transfer",
+    authMiddleware,
+    createTransferRoutes(recordShiftTransferController)
+  );
+
+  app.use(
+    "/analytics",
+    authMiddleware,
+    createAnalyticsRoutes(
+      getLeaveCountSummaryController,
+      getWorkSummaryController,
+      getDailyAnalyticsController
+    )
+  );
+
+  // ====================================================================
+  // Global error handler
+  // ====================================================================
+  app.use(errorHandler);
+
+  return app;
+}
+
 // ======================================================================
-// Controllers
-// ======================================================================
-const startWorkController = new StartWorkController(startWorkService);
-const closeWorkController = new CloseWorkController(closeWorkService);
-const correctWorkController = new CorrectWorkController(correctWorkService);
-const recordLeaveController = new RecordLeaveController(recordLeaveService);
-const leaveCorrectionController = new LeaveCorrectionController(leaveCorrectionService);
-const recordShiftTransferController = new RecordShiftTransferController(recordShiftTransferService);
-
-const getLeaveCountSummaryController =
-  new GetLeaveCountSummaryController(getLeaveCountSummaryService);
-
-const getWorkSummaryController =
-  new GetWorkSummaryController(getWorkSummaryService);
-
-const getDailyAnalyticsController =
-  new GetDailyAnalyticsController(getDailyAnalyticsService);
-
-const authenticateDriverController =
-  new AuthenticateDriverController(authenticateDriverService);
-
-const getMeController = new GetMeController(getMeService);
-const getWorkStatusController = new GetWorkStatusController(getWorkStatusService);
-const getEntriesController = new GetEntriesController(getEntriesService);
-const getEntryByIdController = new GetEntryByIdController(getEntryByIdService);
-
-// ======================================================================
-// Routes
-// ======================================================================
-app.get("/health", (_, res) => res.json({ status: "ok" }));
-
-app.use("/auth", createAuthRoutes(authenticateDriverController));
-app.use("/me", authMiddleware, createMeRoutes(getMeController));
-
-app.use(
-  "/entries",
-  authMiddleware,
-  createEntriesRoutes(
-    getEntriesController,
-    getEntryByIdController
-  )
-);
-
-app.use("/work", authMiddleware, createWorkStatusRoutes(getWorkStatusController));
-
-app.use(
-  "/work",
-  authMiddleware,
-  createWorkRoutes(
-    startWorkController,
-    closeWorkController,
-    correctWorkController
-  )
-);
-
-app.use(
-  "/leave",
-  authMiddleware,
-  createLeaveRoutes(
-    recordLeaveController,
-    leaveCorrectionController
-  )
-);
-
-app.use(
-  "/transfer",
-  authMiddleware,
-  createTransferRoutes(recordShiftTransferController)
-);
-
-app.use(
-  "/analytics",
-  authMiddleware,
-  createAnalyticsRoutes(
-    getLeaveCountSummaryController,
-    getWorkSummaryController,
-    getDailyAnalyticsController
-  )
-);
-
-// ======================================================================
-// Global error handler (✅ CORRECT)
-// ======================================================================
-app.use(errorHandler);
-
-// ======================================================================
-// Server start
+// Server start (prod only)
 // ======================================================================
 const PORT = process.env.PORT || 3000;
 
 if (require.main === module) {
+  const app = createApp();
   app.listen(PORT, () => {
-    logger.info("Server started", { port: PORT });
+    console.log("Server started on port", PORT);
   });
 }
