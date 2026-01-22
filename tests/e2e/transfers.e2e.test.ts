@@ -1,6 +1,7 @@
 import request from "supertest";
 import { describe, it, expect } from "vitest";
-import { app } from "../../src/server";
+import { v4 as uuidv4 } from "uuid";
+import { app } from "./setup";
 import {
   TEST_DRIVER_ID,
   OTHER_DRIVER_ID,
@@ -11,16 +12,18 @@ import {
 describe.sequential("E2E: Shift transfers", () => {
 
   async function startAndCloseWork(authHeader: any) {
+    const workPeriodId = uuidv4();
+
     const startRes = await request(app)
       .post("/work/start")
       .set(authHeader)
       .send({
+        workPeriodId,
         startTime: "2026-01-14T08:00:00Z",
       })
       .expect(201);
 
-    const workPeriodId = startRes.body.workPeriodId;
-    expect(workPeriodId).toBeDefined();
+    expect(startRes.body.workPeriodId).toBe(workPeriodId);
 
     await request(app)
       .post("/work/close")
@@ -92,15 +95,16 @@ describe.sequential("E2E: Shift transfers", () => {
   });
 
   it("does not close or modify an OPEN work period when transfer is attempted", async () => {
-    const startRes = await request(app)
+    const workPeriodId = uuidv4();
+
+    await request(app)
       .post("/work/start")
       .set(TEST_AUTH_HEADER)
       .send({
+        workPeriodId,
         startTime: "2026-01-15T08:00:00Z",
       })
       .expect(201);
-
-    const workPeriodId = startRes.body.workPeriodId;
 
     await request(app)
       .post("/transfer/record")
@@ -129,7 +133,7 @@ describe.sequential("E2E: Shift transfers", () => {
       .send({
         fromDriverId: TEST_DRIVER_ID,
         toDriverId: OTHER_DRIVER_ID,
-        workPeriodId: "ffffffff-9999-9999-9999-999999999999",
+        workPeriodId: uuidv4(), // valid UUID, but not in DB
         reason: "Invalid work ID",
       })
       .expect(400);

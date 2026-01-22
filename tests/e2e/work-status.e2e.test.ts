@@ -1,12 +1,20 @@
 import request from "supertest";
-import { describe, it, expect } from "vitest";
-import { app } from "../../src/server";
+import { describe, it, expect, afterEach } from "vitest";
+import { randomUUID } from "crypto";
+import { app } from "./setup";
 import {
   TEST_AUTH_HEADER,
   OTHER_AUTH_HEADER,
 } from "./setup";
+import { prisma } from "../../src/infrastructure/prisma/prismaClient";
 
 describe.sequential("E2E: GET /work/status", () => {
+
+  afterEach(async () => {
+    // Clean only work-related state
+    await prisma.workPeriod.deleteMany({});
+    await prisma.entryProjection.deleteMany({});
+  });
 
   it("returns CLOSED when no work period is active", async () => {
     const res = await request(app)
@@ -25,6 +33,7 @@ describe.sequential("E2E: GET /work/status", () => {
       .post("/work/start")
       .set(TEST_AUTH_HEADER)
       .send({
+        workPeriodId: randomUUID(),
         startTime: "2026-01-20T08:00:00Z",
       })
       .expect(201);
@@ -45,6 +54,7 @@ describe.sequential("E2E: GET /work/status", () => {
       .post("/work/start")
       .set(TEST_AUTH_HEADER)
       .send({
+        workPeriodId: randomUUID(),
         startTime: "2026-01-21T09:00:00Z",
       })
       .expect(201);
@@ -73,6 +83,7 @@ describe.sequential("E2E: GET /work/status", () => {
       .post("/work/start")
       .set(TEST_AUTH_HEADER)
       .send({
+        workPeriodId: randomUUID(),
         startTime: "2026-01-22T08:00:00Z",
       })
       .expect(201);

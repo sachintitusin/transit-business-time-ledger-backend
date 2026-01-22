@@ -1,6 +1,6 @@
 import request from "supertest";
 import { describe, it, expect } from "vitest";
-import { app } from "../../src/server";
+import { app } from "./setup";
 import { TEST_AUTH_HEADER } from "./setup";
 
 describe("E2E: GET /analytics/daily", () => {

@@ -1,6 +1,6 @@
 import request from "supertest";
 import { describe, it } from "vitest";
-import { app } from "../../src/server";
+import { app } from "./setup";
 import { TEST_AUTH_HEADER } from "./setup";
 import { makeIds } from "../helpers/ids";
 

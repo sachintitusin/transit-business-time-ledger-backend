@@ -1,7 +1,7 @@
 import request from "supertest";
 import { describe, it, expect } from "vitest";
-import { app } from "../../src/server";
-import { TEST_AUTH_HEADER } from "./setup";
+import { app, TEST_AUTH_HEADER } from "./setup";
+import { v4 as uuidv4 } from "uuid";
 
 describe("E2E: GET /entries/:id", () => {
 
@@ -13,17 +13,17 @@ describe("E2E: GET /entries/:id", () => {
   });
 
   it("returns a WORK entry by id", async () => {
-    // 1️⃣ Start work
-    const startRes = await request(app)
+    const workPeriodId = uuidv4();
+
+    // 1️⃣ Start work (explicit ID)
+    await request(app)
       .post("/work/start")
       .set(TEST_AUTH_HEADER)
       .send({
+        workPeriodId,
         startTime: "2026-02-05T08:00:00Z",
       })
       .expect(201);
-
-    const workPeriodId = startRes.body.workPeriodId;
-    expect(workPeriodId).toBeDefined();
 
     // 2️⃣ Close work
     await request(app)
@@ -48,8 +48,9 @@ describe("E2E: GET /entries/:id", () => {
   });
 
   it("returns a LEAVE entry by id", async () => {
-    // 1️⃣ Record leave
-    const leaveRes = await request(app)
+
+    // 1️⃣ Record leave (explicit ID)
+    const leave = await request(app)
       .post("/leave/record")
       .set(TEST_AUTH_HEADER)
       .send({
@@ -59,8 +60,7 @@ describe("E2E: GET /entries/:id", () => {
       })
       .expect(201);
 
-    const leaveId = leaveRes.body.leaveId;
-    expect(leaveId).toBeDefined();
+    const leaveId = leave.body.leaveId
 
     // 2️⃣ Fetch entry
     const res = await request(app)

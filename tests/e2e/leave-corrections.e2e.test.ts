@@ -1,28 +1,18 @@
 import request from "supertest";
 import { describe, it } from "vitest";
-import { app } from "../../src/server";
-import { TOKEN_DRIVER_1 } from "../helpers/auth.helper";  // ✅ Use this instead
+import { app } from "./setup";
+import { TOKEN_DRIVER_1 } from "../helpers/auth.helper";
+import { randomUUID } from "crypto";
 
-const LEAVE_IDS = {
-  test1: "aaaaaaaa-1111-1111-1111-111111111111",
-  test2: "bbbbbbbb-2222-2222-2222-222222222222",
-  test3: "cccccccc-3333-3333-3333-333333333333",
-  test4: "dddddddd-4444-4444-4444-444444444444",
-  test5: "eeeeeeee-5555-5555-5555-555555555555",
-  test6: "ffffffff-6666-6666-6666-666666666666",
-};
+const WORK_PERIOD_ID = randomUUID();
 
-const WORK_IDS = {
-  test3: "33333333-3333-3333-3333-333333333333",
-};
 
 describe.sequential("E2E: Leave corrections", () => {
-  
+
   it("corrects a leave successfully when no work conflicts", async () => {
-    // Record leave first
     const recordResponse = await request(app)
       .post("/leave/record")
-      .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)  // ✅
+      .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
       .send({
         startTime: "2026-01-20T10:00:00Z",
         endTime: "2026-01-20T14:00:00Z",
@@ -30,14 +20,13 @@ describe.sequential("E2E: Leave corrections", () => {
       })
       .expect(201);
 
-    const { leaveId } = recordResponse.body;  // ✅ Get generated ID
+    const { leaveId } = recordResponse.body;
 
-    // Correct it
     await request(app)
       .post("/leave/correct")
-      .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)  // ✅
+      .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
       .send({
-        leaveId,  // ✅ Only send this
+        leaveId,
         correctedStartTime: "2026-01-20T11:00:00Z",
         correctedEndTime: "2026-01-20T15:00:00Z",
         reason: "Appointment ran longer",
@@ -46,7 +35,6 @@ describe.sequential("E2E: Leave corrections", () => {
   });
 
   it("allows multiple corrections on the same leave (correction chain)", async () => {
-    // Record leave
     const recordResponse = await request(app)
       .post("/leave/record")
       .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
@@ -59,7 +47,6 @@ describe.sequential("E2E: Leave corrections", () => {
 
     const { leaveId } = recordResponse.body;
 
-    // First correction
     await request(app)
       .post("/leave/correct")
       .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
@@ -71,7 +58,6 @@ describe.sequential("E2E: Leave corrections", () => {
       })
       .expect(201);
 
-    // Second correction
     await request(app)
       .post("/leave/correct")
       .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
@@ -85,8 +71,7 @@ describe.sequential("E2E: Leave corrections", () => {
   });
 
   it("rejects leave correction that would overlap with closed work", async () => {
-    // Record leave first
-    const recordResponse = await request(app)
+    const leaveRes = await request(app)
       .post("/leave/record")
       .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
       .send({
@@ -96,16 +81,18 @@ describe.sequential("E2E: Leave corrections", () => {
       })
       .expect(201);
 
-    const { leaveId } = recordResponse.body;
+    const { leaveId } = leaveRes.body;
 
-    // Record and close work
-    await request(app)
+    const startRes = await request(app)
       .post("/work/start")
       .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
       .send({
+        workPeriodId: WORK_PERIOD_ID,
         startTime: "2026-01-22T09:00:00Z",
       })
       .expect(201);
+
+    const { workPeriodId } = startRes.body;
 
     await request(app)
       .post("/work/close")
@@ -115,12 +102,12 @@ describe.sequential("E2E: Leave corrections", () => {
       })
       .expect(200);
 
-    // Attempt to correct leave to overlap with work
     await request(app)
       .post("/leave/correct")
       .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
       .send({
         leaveId,
+        workPeriodId, // ✅ REQUIRED BY DTO
         correctedStartTime: "2026-01-22T08:00:00Z",
         correctedEndTime: "2026-01-22T10:00:00Z",
         reason: "Would overlap work",
@@ -183,11 +170,12 @@ describe.sequential("E2E: Leave corrections", () => {
       .post("/leave/correct")
       .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
       .send({
-        leaveId: "99999999-9999-9999-9999-999999999999",
+        leaveId: "99999999-9999-4999-8999-999999999999",
         correctedStartTime: "2026-01-25T10:00:00Z",
         correctedEndTime: "2026-01-25T14:00:00Z",
         reason: "Non-existent leave",
       })
       .expect(400);
   });
+
 });

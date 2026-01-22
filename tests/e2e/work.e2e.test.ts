@@ -1,31 +1,50 @@
 import request from "supertest";
-import { describe, it, expect } from "vitest";
-import { app } from "../../src/server";
+import { describe, it, expect, beforeEach } from "vitest";
+import { app } from "./setup";
 import { TOKEN_DRIVER_1, TOKEN_DRIVER_2 } from "../helpers/auth.helper";
 
-
+import { randomUUID } from "crypto";
 
 const WORK_IDS = {
-  test1: "11111111-1111-1111-1111-111111111111",
-  test2a: "22222222-2222-2222-2222-222222222222",
-  test2b: "33333333-3333-3333-3333-333333333333",
-  test3: "44444444-4444-4444-4444-444444444444",
-  test4: "55555555-5555-5555-5555-555555555555",
-  test5: "66666666-6666-6666-6666-666666666666",
-  test6: "77777777-7777-7777-7777-777777777777",
-  test7a: "88888888-8888-8888-8888-888888888888",
-  test7b: "99999999-9999-9999-9999-999999999999",
+  test1: randomUUID(),
+  test2a: randomUUID(),
+  test2b: randomUUID(),
+  test3: randomUUID(),
+  test4: randomUUID(),
+  test5: randomUUID(),
+  test6: randomUUID(),
+  test7a: randomUUID(),
+  test7b: randomUUID(),
 };
 
 const LEAVE_IDS = {
-  test4: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-  test5: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+  test4: randomUUID(),
+  test5: randomUUID(),
 };
+
 
 describe.sequential("E2E: Work lifecycle", () => {
 
-  it("starts and closes a work period successfully", async () => {
+  /**
+   * 🔒 Test isolation
+   * Ensure no OPEN work period leaks between tests.
+   * Closing when none exists is acceptable and ignored.
+   */
+  beforeEach(async () => {
     await request(app)
+      .post("/work/close")
+      .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
+      .send({ endTime: new Date().toISOString() });
+
+    await request(app)
+      .post("/work/close")
+      .set("Authorization", `Bearer ${TOKEN_DRIVER_2}`)
+      .send({ endTime: new Date().toISOString() });
+  });
+
+  it("starts and closes a work period successfully", async () => {
+    // 1️⃣ Start work
+    const startRes = await request(app)
       .post("/work/start")
       .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
       .send({
@@ -34,6 +53,23 @@ describe.sequential("E2E: Work lifecycle", () => {
       })
       .expect(201);
 
+    const workPeriodId = startRes.body.workPeriodId;
+
+    // 🔍 PROBE: verify work entry exists immediately after start
+    const entryRes = await request(app)
+      .get(`/entries/${workPeriodId}`)
+      .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
+      .expect(200);
+
+    expect(entryRes.body).toMatchObject({
+      id: workPeriodId,
+      type: "WORK",
+    });
+
+    expect(entryRes.body.startTime).toBe("2026-01-10T06:30:00.000Z");
+    expect(entryRes.body.endTime).toBeNull();
+
+    // 2️⃣ Close work
     await request(app)
       .post("/work/close")
       .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
@@ -42,6 +78,7 @@ describe.sequential("E2E: Work lifecycle", () => {
       })
       .expect(200);
 
+    // 3️⃣ Analytics sanity check
     const summary = await request(app)
       .get("/analytics/work")
       .set("Authorization", `Bearer ${TOKEN_DRIVER_1}`)
