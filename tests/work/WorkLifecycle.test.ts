@@ -8,12 +8,13 @@ import { InMemoryWorkPeriodRepository } from "../fakes/InMemoryWorkPeriodReposit
 import { InMemoryLeaveRepository } from "../fakes/InMemoryLeaveRepository";
 import { InMemoryLeaveCorrectionRepository } from "../fakes/InMemoryLeaveCorrectionRepository";
 import { InMemoryWorkCorrectionRepository } from "../fakes/InMemoryWorkCorrectionRepository";
+import { InMemoryEntryProjectionRepository } from "../fakes/InMemoryEntryProjectionRepository";
 
 import { FakeTransactionManager } from "../fakes/FakeTransactionManager";
 import { FakeLogger } from "../fakes/FakeLogger";
 import { MaxShiftDurationPolicy } from "../../src/application/policies/MaxShiftDurationPolicy";
 
-import { DriverId } from "../../src/domain/shared/types";
+import { DriverId, WorkPeriodId } from "../../src/domain/shared/types";
 
 describe("Work lifecycle", () => {
 
@@ -22,12 +23,14 @@ describe("Work lifecycle", () => {
     const tx = new FakeTransactionManager();
     const logger = new FakeLogger();
 
-    const startWork = new StartWorkService(workRepo, tx, logger);
+    const entryProjectionRepo = new InMemoryEntryProjectionRepository();
+    const startWork = new StartWorkService(workRepo, entryProjectionRepo, tx, logger);
 
     const driverId = "driver-1" as DriverId;
+    const workId = "work-1" as WorkPeriodId;
     const now = new Date("2025-01-01T09:00:00Z");
 
-    await startWork.execute(driverId, now, now);
+    await startWork.execute(driverId, workId, now, now);
 
     const openWork = await workRepo.findOpenByDriver(driverId);
 
@@ -40,15 +43,16 @@ describe("Work lifecycle", () => {
     const tx = new FakeTransactionManager();
     const logger = new FakeLogger();
 
-    const startWork = new StartWorkService(workRepo, tx, logger);
+    const entryProjectionRepo = new InMemoryEntryProjectionRepository();
+    const startWork = new StartWorkService(workRepo, entryProjectionRepo, tx, logger);
 
     const driverId = "driver-1" as DriverId;
     const now = new Date("2025-01-01T09:00:00Z");
 
-    await startWork.execute(driverId, now, now);
+    await startWork.execute(driverId, "work-1" as WorkPeriodId, now, now);
 
     await expect(
-      startWork.execute(driverId, now, now)
+      startWork.execute(driverId, "work-2" as WorkPeriodId, now, now)
     ).rejects.toThrow();
   });
 
@@ -59,11 +63,13 @@ describe("Work lifecycle", () => {
     const tx = new FakeTransactionManager();
     const logger = new FakeLogger();
     const policy = new MaxShiftDurationPolicy();
+    const entryProjectionRepo = new InMemoryEntryProjectionRepository();
 
     const closeWork = new CloseWorkService(
       workRepo,
       leaveRepo,
       leaveCorrectionRepo,
+      entryProjectionRepo,
       tx,
       policy,
       logger
@@ -85,22 +91,25 @@ describe("Work lifecycle", () => {
     const logger = new FakeLogger();
     const policy = new MaxShiftDurationPolicy();
 
-    const startWork = new StartWorkService(workRepo, tx, logger);
+    const entryProjectionRepo = new InMemoryEntryProjectionRepository();
+    const startWork = new StartWorkService(workRepo, entryProjectionRepo, tx, logger);
     const closeWork = new CloseWorkService(
       workRepo,
       leaveRepo,
       leaveCorrectionRepo,
+      entryProjectionRepo,
       tx,
       policy,
       logger
     );
 
     const driverId = "driver-1" as DriverId;
+    const workId = "work-1" as WorkPeriodId;
 
     const start = new Date("2025-01-01T09:00:00Z");
     const end = new Date("2025-01-01T17:00:00Z");
 
-    const workId = await startWork.execute(driverId, start, start);
+    await startWork.execute(driverId, workId, start, start);
     await closeWork.execute(driverId, end);
 
     const work = await workRepo.findById(workId);
@@ -117,11 +126,13 @@ describe("Work lifecycle", () => {
     const logger = new FakeLogger();
     const policy = new MaxShiftDurationPolicy();
 
-    const startWork = new StartWorkService(workRepo, tx, logger);
+    const entryProjectionRepo = new InMemoryEntryProjectionRepository();
+    const startWork = new StartWorkService(workRepo, entryProjectionRepo, tx, logger);
     const closeWork = new CloseWorkService(
       workRepo,
       leaveRepo,
       leaveCorrectionRepo,
+      entryProjectionRepo,
       tx,
       policy,
       logger
@@ -131,17 +142,19 @@ describe("Work lifecycle", () => {
       correctionRepo,
       leaveRepo,
       leaveCorrectionRepo,
+      entryProjectionRepo,
       tx,
       policy,
       logger
     );
 
     const driverId = "driver-1" as DriverId;
+    const workId = "work-1" as WorkPeriodId;
 
     const originalStart = new Date("2025-01-01T09:00:00Z");
     const originalEnd = new Date("2025-01-01T12:00:00Z");
 
-    const workId = await startWork.execute(driverId, originalStart, originalStart);
+    await startWork.execute(driverId, workId, originalStart, originalStart);
     await closeWork.execute(driverId, originalEnd);
 
     await correctWork.execute({
@@ -164,14 +177,16 @@ describe("Work lifecycle", () => {
     const tx = new FakeTransactionManager();
     const logger = new FakeLogger();
 
-    const startWork = new StartWorkService(workRepo, tx, logger);
+    const entryProjectionRepo = new InMemoryEntryProjectionRepository();
+    const startWork = new StartWorkService(workRepo, entryProjectionRepo, tx, logger);
 
     const driverId = "driver-1" as DriverId;
+    const workId = "work-1" as WorkPeriodId;
 
     const workTime = new Date("2025-01-01T09:00:00Z");
     const entryTime = new Date("2025-01-03T20:00:00Z");
 
-    const workId = await startWork.execute(driverId, workTime, entryTime);
+    await startWork.execute(driverId, workId, workTime, entryTime);
 
     const work = await workRepo.findById(workId);
 
@@ -187,22 +202,25 @@ describe("Work lifecycle", () => {
     const logger = new FakeLogger();
     const policy = new MaxShiftDurationPolicy();
 
-    const startWork = new StartWorkService(workRepo, tx, logger);
+    const entryProjectionRepo = new InMemoryEntryProjectionRepository();
+    const startWork = new StartWorkService(workRepo, entryProjectionRepo, tx, logger);
     const closeWork = new CloseWorkService(
       workRepo,
       leaveRepo,
       leaveCorrectionRepo,
+      entryProjectionRepo,
       tx,
       policy,
       logger
     );
 
     const driverId = "driver-1" as DriverId;
+    const workId = "work-1" as WorkPeriodId;
 
     const start = new Date("2025-01-01T09:00:00Z");
     const invalidEnd = new Date("2025-01-01T08:00:00Z");
 
-    await startWork.execute(driverId, start, start);
+    await startWork.execute(driverId, workId, start, start);
 
     await expect(
       closeWork.execute(driverId, invalidEnd)
@@ -218,21 +236,25 @@ describe("Work lifecycle", () => {
     const logger = new FakeLogger();
     const policy = new MaxShiftDurationPolicy();
 
-    const startWork = new StartWorkService(workRepo, tx, logger);
+    const entryProjectionRepo = new InMemoryEntryProjectionRepository();
+    const startWork = new StartWorkService(workRepo, entryProjectionRepo, tx, logger);
     const correctWork = new CorrectWorkService(
       workRepo,
       correctionRepo,
       leaveRepo,
       leaveCorrectionRepo,
+      entryProjectionRepo,
       tx,
       policy,
       logger
     );
 
     const driverId = "driver-1" as DriverId;
+    const workId = "work-1" as WorkPeriodId;
 
-    const workId = await startWork.execute(
+    await startWork.execute(
       driverId,
+      workId,
       new Date("2025-01-01T09:00:00Z"),
       new Date()
     );
@@ -258,11 +280,13 @@ describe("Work lifecycle", () => {
     const logger = new FakeLogger();
     const policy = new MaxShiftDurationPolicy();
 
-    const startWork = new StartWorkService(workRepo, tx, logger);
+    const entryProjectionRepo = new InMemoryEntryProjectionRepository();
+    const startWork = new StartWorkService(workRepo, entryProjectionRepo, tx, logger);
     const closeWork = new CloseWorkService(
       workRepo,
       leaveRepo,
       leaveCorrectionRepo,
+      entryProjectionRepo,
       tx,
       policy,
       logger
@@ -272,15 +296,18 @@ describe("Work lifecycle", () => {
       correctionRepo,
       leaveRepo,
       leaveCorrectionRepo,
+      entryProjectionRepo,
       tx,
       policy,
       logger
     );
 
     const driverId = "driver-1" as DriverId;
+    const workId = "work-1" as WorkPeriodId;
 
-    const workId = await startWork.execute(
+    await startWork.execute(
       driverId,
+      workId,
       new Date("2025-01-01T09:00:00Z"),
       new Date()
     );
