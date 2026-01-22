@@ -129,3 +129,39 @@ model ShiftTransferEvent {
   @@index([driverId, createdAt])
   @@index([workPeriodId])
 }
+
+model EntryProjection {
+  /// Entry identity (same as source event ID)
+  id        String @id @db.Uuid
+  driverId  String @db.Uuid
+
+  /// Classification
+  /// Allowed values (by convention, not DB enum):
+  /// - "WORK"
+  /// - "LEAVE"
+  type      String
+
+  /// Effective times (authoritative for reads)
+  effectiveStartTime DateTime
+  effectiveEndTime   DateTime?
+
+  /// Provenance (rebuild-only metadata)
+  /// - sourceId   → WorkPeriod.id | LeaveEvent.id
+  /// - sourceType → "work_period" | "leave_event"
+  sourceId   String @db.Uuid
+  sourceType String
+
+  /// Projection bookkeeping
+  /// createdAt → copied from source event
+  /// updatedAt → auto-updated on correction
+  createdAt DateTime
+  updatedAt DateTime @updatedAt
+
+  /// Query performance indexes
+  @@index([driverId, effectiveStartTime])
+  @@index([driverId, effectiveEndTime])
+  @@index([driverId, effectiveStartTime, effectiveEndTime])
+
+  /// Explicit table name (important)
+  @@map("entries_projection")
+}

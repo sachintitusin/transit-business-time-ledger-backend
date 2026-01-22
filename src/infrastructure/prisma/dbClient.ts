@@ -13,4 +13,5 @@ export type DbClient = {
   shiftTransferEvent: PrismaClient["shiftTransferEvent"];
   authIdentity: PrismaClient["authIdentity"];
   driver: PrismaClient["driver"]
+  entryProjection: PrismaClient["entryProjection"];
 };
