@@ -1,8 +1,11 @@
 import { LeaveRepository } from '../../ports/LeaveRepository'
 import { LeaveCorrectionRepository } from '../../ports/LeaveCorrectionRepository'
 import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository'
+import { EntryProjectionRepository } from '../../ports/EntryProjectionRepository'
 import { TransactionManager } from '../../ports/TransactionManager'
 import { AppLogger } from '../../ports/Logger'
+import { EntryType } from '../../projections/EntryType'
+import { EntrySourceType } from '../../projections/EntrySourceType'
 
 import { LeaveCorrection } from '../../../domain/leave/LeaveCorrection'
 import { EffectiveLeaveTime } from '../../../domain/leave/EffectiveLeaveTime'
@@ -22,9 +25,10 @@ export class LeaveCorrectionService {
     private readonly leaveRepository: LeaveRepository,
     private readonly leaveCorrectionRepository: LeaveCorrectionRepository,
     private readonly workPeriodRepository: WorkPeriodRepository,
+    private readonly entryProjectionRepository: EntryProjectionRepository,
     private readonly transactionManager: TransactionManager,
     private readonly logger: AppLogger
-  ) {}
+  ) { }
 
   async execute(command: {
     driverId: DriverId
@@ -109,6 +113,25 @@ export class LeaveCorrectionService {
         }
 
         await this.leaveCorrectionRepository.save(correction)
+
+        this.logger.info('LeaveCorrection saved to repo', {
+          leaveId: leave.id,
+          correctionId: correction.id,
+          effectiveStart: effectiveLeave.range.start,
+          effectiveEnd: effectiveLeave.range.end,
+        })
+
+        // CQRS: Update projection
+        await this.entryProjectionRepository.save({
+          id: leave.id,
+          driverId: leave.driverId,
+          type: EntryType.LEAVE,
+          effectiveStartTime: effectiveLeave.range.start,
+          effectiveEndTime: effectiveLeave.range.end,
+          sourceId: leave.id,
+          sourceType: EntrySourceType.LEAVE_EVENT,
+          createdAt: leave.createdAt,
+        })
       })
 
       this.logger.info('LeaveCorrection succeeded', {

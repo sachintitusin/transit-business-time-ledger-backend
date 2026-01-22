@@ -1,10 +1,13 @@
 import { LeaveRepository } from '../../ports/LeaveRepository'
 import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository'
 import { WorkCorrectionRepository } from '../../ports/WorkCorrectionRepository'
+import { EntryProjectionRepository } from '../../ports/EntryProjectionRepository'
 import { TransactionManager } from '../../ports/TransactionManager'
 import { AppLogger } from '../../ports/Logger'
 
 import { EffectiveLeaveTime } from '../../../domain/leave/EffectiveLeaveTime'
+import { EntryType } from '../../projections/EntryType'
+import { EntrySourceType } from '../../projections/EntrySourceType'
 import { EffectiveWorkTime } from '../../../domain/work/EffectiveWorkTime'
 import { LeaveEvent } from '../../../domain/leave/LeaveEvent'
 import { DomainError } from '../../../domain/shared/DomainError'
@@ -19,9 +22,10 @@ export class RecordLeaveService {
     private readonly leaveRepository: LeaveRepository,
     private readonly workPeriodRepository: WorkPeriodRepository,
     private readonly workCorrectionRepository: WorkCorrectionRepository,
+    private readonly entryProjectionRepository: EntryProjectionRepository,
     private readonly transactionManager: TransactionManager,
     private readonly logger: AppLogger
-  ) {}
+  ) { }
 
   async execute(command: {
     driverId: DriverId
@@ -100,8 +104,19 @@ export class RecordLeaveService {
         }
 
         await this.leaveRepository.save(leave)
-      })
 
+        // CQRS: Update projection
+        await this.entryProjectionRepository.save({
+          id: leave.id,
+          driverId: leave.driverId,
+          type: EntryType.LEAVE,
+          effectiveStartTime: leave.declaredStartTime,
+          effectiveEndTime: leave.declaredEndTime,
+          sourceId: leave.id,
+          sourceType: EntrySourceType.LEAVE_EVENT,
+          createdAt: leave.createdAt,
+        })
+      })
       this.logger.info('RecordLeave succeeded', {
         driverId,
         leaveId,

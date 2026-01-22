@@ -2,7 +2,10 @@ import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository'
 import { LeaveRepository } from '../../ports/LeaveRepository'
 import { LeaveCorrectionRepository } from '../../ports/LeaveCorrectionRepository'
 import { TransactionManager } from '../../ports/TransactionManager'
+import { EntryProjectionRepository } from '../../ports/EntryProjectionRepository'
 import { AppLogger } from '../../ports/Logger'
+import { EntryType } from '../../projections/EntryType'
+import { EntrySourceType } from '../../projections/EntrySourceType'
 
 import { EffectiveLeaveTime } from '../../../domain/leave/EffectiveLeaveTime'
 import { NoActiveWorkPeriod } from '../../../domain/work/WorkPeriodErrors'
@@ -16,10 +19,11 @@ export class CloseWorkService {
     private readonly workPeriodRepository: WorkPeriodRepository,
     private readonly leaveRepository: LeaveRepository,
     private readonly leaveCorrectionRepository: LeaveCorrectionRepository,
+    private readonly entryProjectionRepository: EntryProjectionRepository,
     private readonly transactionManager: TransactionManager,
     private readonly maxShiftPolicy: MaxShiftDurationPolicy = new MaxShiftDurationPolicy(),
     private readonly logger: AppLogger
-  ) {}
+  ) { }
 
   async execute(
     driverId: DriverId,
@@ -100,6 +104,18 @@ export class CloseWorkService {
         workPeriod.close(endTime)
 
         await this.workPeriodRepository.save(workPeriod)
+
+        // CQRS: Update projection
+        await this.entryProjectionRepository.save({
+          id: workPeriod.id,
+          driverId: driverId,
+          type: EntryType.WORK,
+          effectiveStartTime: workPeriod.declaredStartTime,
+          effectiveEndTime: endTime,
+          sourceId: workPeriod.id,
+          sourceType: EntrySourceType.WORK_PERIOD,
+          createdAt: workPeriod.createdAt,
+        })
       })
 
       this.logger.info('CloseWork succeeded', {

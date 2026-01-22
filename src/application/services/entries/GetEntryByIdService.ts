@@ -1,73 +1,66 @@
-import { WorkPeriodRepository } from "../../ports/WorkPeriodRepository";
-import { LeaveRepository } from "../../ports/LeaveRepository";
+import { EntryProjectionRepository, EntryType } from "../../ports/EntryProjectionRepository";
 import { DriverId } from "../../../domain/shared/types";
 import { AppLogger } from "../../ports/Logger";
 
+type EntryResponse = {
+  id: string;
+  type: EntryType;
+  startTime: Date;
+  endTime: Date | null;
+  status: "OPEN" | "CLOSED";
+  createdAt: Date;
+};
+
 export class GetEntryByIdService {
   constructor(
-    private readonly workRepo: WorkPeriodRepository,
-    private readonly leaveRepo: LeaveRepository,
+    private readonly entryProjectionRepo: EntryProjectionRepository,
     private readonly logger: AppLogger
-  ) {}
+  ) { }
 
-  async execute(entryId: string, driverId: DriverId) {
-    this.logger.info('GetEntryById invoked', {
-      driverId,
+  async execute(
+    entryId: string,
+    driverId: DriverId
+  ): Promise<EntryResponse | null> {
+    this.logger.info("GetEntryById invoked", {
       entryId,
+      driverId,
     });
 
-    try {
-      // ---- Try WORK lookup ----
-      const work =
-        await this.workRepo.findById(entryId as any);
-
-      if (work && work.driverId === driverId) {
-        this.logger.info('GetEntryById found WORK', {
-          driverId,
-          entryId,
-        });
-
-        return {
-          id: work.id,
-          type: "WORK",
-          startTime: work.declaredStartTime,
-          endTime: work.declaredEndTime,
-          createdAt: work.createdAt,
-        };
-      }
-
-      // ---- Try LEAVE lookup ----
-      const leave =
-        await this.leaveRepo.findById(entryId as any);
-
-      if (leave && leave.driverId === driverId) {
-        this.logger.info('GetEntryById found LEAVE', {
-          driverId,
-          entryId,
-        });
-
-        return {
-          id: leave.id,
-          type: "LEAVE",
-          startTime: leave.declaredStartTime,
-          endTime: leave.declaredEndTime,
-          createdAt: leave.createdAt,
-        };
-      }
-
-      this.logger.warn('GetEntryById not found', {
-        driverId,
+    const record =
+      await this.entryProjectionRepo.findById(
         entryId,
-      });
+        driverId
+      );
 
+    if (!record) {
+      this.logger.warn("GetEntryById not found", {
+        entryId,
+        driverId,
+      });
       return null;
-    } catch (err) {
-      this.logger.error('GetEntryById failed unexpectedly', {
-        driverId,
-        entryId,
-        error: err,
-      });
-      throw err;
     }
+
+    const entry: EntryResponse = {
+      id: record.id,
+      type: record.type,
+
+      startTime: record.effectiveStartTime,
+      endTime: record.effectiveEndTime,
+
+      status:
+        record.type === "WORK" && record.effectiveEndTime === null
+          ? "OPEN"
+          : "CLOSED",
+
+      createdAt: record.createdAt,
+    };
+
+    this.logger.info("GetEntryById succeeded", {
+      entryId,
+      driverId,
+      type: entry.type,
+    });
+
+    return entry;
   }
 }

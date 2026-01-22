@@ -2,7 +2,10 @@ import { WorkPeriodRepository } from '../../ports/WorkPeriodRepository'
 import { WorkCorrectionRepository } from '../../ports/WorkCorrectionRepository'
 import { LeaveRepository } from '../../ports/LeaveRepository'
 import { LeaveCorrectionRepository } from '../../ports/LeaveCorrectionRepository'
+import { EntryProjectionRepository } from '../../ports/EntryProjectionRepository'
 import { TransactionManager } from '../../ports/TransactionManager'
+import { EntryType } from '../../projections/EntryType'
+import { EntrySourceType } from '../../projections/EntrySourceType'
 import { AppLogger } from '../../ports/Logger'
 
 import { WorkCorrection } from '../../../domain/work/WorkCorrection'
@@ -24,10 +27,11 @@ export class CorrectWorkService {
     private readonly workCorrectionRepository: WorkCorrectionRepository,
     private readonly leaveRepository: LeaveRepository,
     private readonly leaveCorrectionRepository: LeaveCorrectionRepository,
+    private readonly entryProjectionRepository: EntryProjectionRepository,
     private readonly transactionManager: TransactionManager,
     private readonly maxShiftPolicy: MaxShiftDurationPolicy = new MaxShiftDurationPolicy(),
     private readonly logger: AppLogger
-  ) {}
+  ) { }
 
   async execute(command: {
     driverId: DriverId
@@ -139,6 +143,18 @@ export class CorrectWorkService {
         )
 
         await this.workCorrectionRepository.save(correction)
+
+        // CQRS: Update projection
+        await this.entryProjectionRepository.save({
+          id: workPeriod.id,
+          driverId: workPeriod.driverId,
+          type: EntryType.WORK,
+          effectiveStartTime: effectiveWork.range.start,
+          effectiveEndTime: effectiveWork.range.end,
+          sourceId: workPeriod.id,
+          sourceType: EntrySourceType.WORK_PERIOD,
+          createdAt: workPeriod.createdAt,
+        })
       })
 
       this.logger.info('CorrectWork succeeded', {
